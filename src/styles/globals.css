@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 224 71% 4%;
+    --foreground: 213 31% 91%;
+    
+    --primary: 267 100% 65%;
+    --primary-foreground: 210 40% 98%;
+    
+    --card: 224 71% 4%;
+    --card-foreground: 213 31% 91%;
+    
+    --popover: 224 71% 4%;
+    --popover-foreground: 213 31% 91%;
+    
+    --muted: 223 47% 11%;
+    --muted-foreground: 215 20.2% 65.1%;
+    
+    --accent: 216 34% 17%;
+    --accent-foreground: 210 40% 98%;
+    
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 210 40% 98%;
+    
+    --border: 216 34% 17%;
+    --input: 216 34% 17%;
+    --ring: 267 100% 65%;
+    
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-jam-dark text-foreground;
+  }
+}
+
+.piano-key {
+  @apply bg-white border border-gray-300 cursor-pointer transition-all;
+}
+
+.piano-key:active,
+.piano-key.active {
+  @apply bg-jam-primary scale-95 shadow-inner;
+}
+
+.piano-key.black {
+  @apply bg-gray-800 border-gray-700;
+}
+
+.piano-key.black:active,
+.piano-key.black.active {
+  @apply bg-jam-primary scale-95 shadow-inner;
+}
+
+.drum-pad {
+  @apply bg-muted rounded-lg cursor-pointer transition-all border border-accent;
+}
+
+.drum-pad:active,
+.drum-pad.active {
+  @apply bg-jam-primary scale-95 shadow-inner border-jam-primary;
+}
+
+.generate-btn {
+  @apply bg-jam-primary hover:bg-purple-600 text-white font-bold py-2 px-4 rounded transition-all;
+}
+
+.generate-btn:active,
+.generate-btn:disabled {
+  @apply opacity-70 scale-95;
+}
+
+.generate-btn .spinning {
+  @apply animate-spin;
+} 
