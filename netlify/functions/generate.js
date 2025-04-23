@@ -11,6 +11,9 @@ const REQUEST_TIMEOUT = 60000;
 // 最大重试次数
 const MAX_RETRIES = 2;
 
+// 默认回调URL (必需参数)
+const DEFAULT_CALLBACK_URL = 'https://aijam123.netlify.app/callback';
+
 // 创建带超时的fetch
 const fetchWithTimeout = async (url, options, timeout = REQUEST_TIMEOUT) => {
   const controller = new AbortController();
@@ -156,7 +159,8 @@ exports.handler = async function(event, context) {
     const requestBody = {
       prompt: prompt,
       instrumental: instrumental, // 显式设置instrumental参数
-      customMode: customMode // 显式设置customMode参数
+      customMode: customMode, // 显式设置customMode参数
+      callBackUrl: callBackUrl || DEFAULT_CALLBACK_URL // 确保callBackUrl参数存在
     };
     
     // 添加其他可选参数
@@ -166,7 +170,6 @@ exports.handler = async function(event, context) {
     if (tags) requestBody.tags = tags;
     if (instrument) requestBody.instrument = instrument;
     if (tempo) requestBody.tempo = tempo;
-    if (callBackUrl) requestBody.callBackUrl = callBackUrl;
     
     console.log('请求体:', JSON.stringify(requestBody, null, 2));
     
