@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { InstrumentType } from '@/types';
 import { Label } from './ui/label';
 import { Switch } from './ui/switch';
@@ -45,7 +45,14 @@ const ControlPanel = ({
     recordedNotes
   } = useJamStore();
   
-  const { generate, loading, error, audioUrl: generatedUrl, progress } = useSuno();
+  const { 
+    generate, 
+    loading, 
+    error, 
+    audioUrl: generatedUrl, 
+    progress,
+    statusDetails
+  } = useSuno();
   
   useEffect(() => {
     if (generatedUrl) {
@@ -97,6 +104,7 @@ const ControlPanel = ({
       }
       
       const params = getGenerateParams(activeInstrument);
+      
       await generate(params);
       
       clearNotes();
@@ -111,6 +119,14 @@ const ControlPanel = ({
   return (
     <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
       <h2 className="text-lg font-semibold mb-4">控制面板</h2>
+      
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 text-red-800 border border-red-200 rounded-md">
+          <p className="text-sm">
+            <strong>错误:</strong> {error}
+          </p>
+        </div>
+      )}
       
       <div className="space-y-6">
         <div className="flex items-center justify-between">
@@ -231,23 +247,47 @@ const ControlPanel = ({
           </div>
         </div>
         
-        <button
-          className="generate-btn w-full mt-6 flex items-center justify-center gap-2"
-          disabled={loading}
-          onClick={handleGenerate}
-        >
-          {loading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              生成中 ({Math.round(progress)}%)
-            </>
-          ) : (
-            <>
-              <Music className="h-4 w-4" />
-              生成AI音乐
-            </>
-          )}
-        </button>
+        <div className="mt-6">
+          <button
+            className={`w-full py-2 rounded-md ${
+              loading ? 'bg-gray-400' : 'bg-jam-primary hover:bg-jam-primary-dark'
+            } text-white font-medium flex items-center justify-center`}
+            onClick={handleGenerate}
+            disabled={loading}
+          >
+            {loading ? (
+              <>
+                <svg
+                  className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  ></circle>
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  ></path>
+                </svg>
+                生成中 {progress ? `(${Math.round(progress)}%)` : ''}
+              </>
+            ) : (
+              <>生成AI音乐</>
+            )}
+          </button>
+          
+          <div className="text-xs text-center mt-2 text-muted-foreground">
+            API状态: {error ? '连接错误' : generatedUrl ? '已连接' : '待连接'}
+          </div>
+        </div>
         
         {generatedUrl && (
           <div className="flex justify-center mt-2">

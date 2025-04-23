@@ -12,7 +12,7 @@
 # 注意：敏感数据如API密钥不应直接在此文件中设置
 # 而应在Netlify的部署设置中进行配置
 [build.environment]
-  NODE_VERSION = "16"
+  NODE_VERSION = "18"
 
 ####################
 # 3. 运行时路由规则

@@ -20,12 +20,13 @@ export type GenerateParams = {
   instrument: InstrumentType;
   tempo?: number;
   callBackUrl?: string;
+  test?: boolean;
 };
 
 export type GenerateResponse = {
   id: string;
-  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETE' | 'FAILED';
-  progress: number;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETE' | 'FAILED';
+  progress?: number;
   audio_url?: string;
   error?: string;
 };

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "node build.js",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },
@@ -32,8 +32,7 @@
     "tailwindcss-animate": "^1.0.7",
     "tone": "^14.7.77",
     "wavesurfer.js": "^7.4.6",
-    "zustand": "^4.4.7",
-    "node-fetch": "^2.6.9"
+    "zustand": "^4.4.7"
   },
   "devDependencies": {
     "@types/node": "^20.10.4",
