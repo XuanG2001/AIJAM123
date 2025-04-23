@@ -46,28 +46,49 @@ const fetchRetry = async (url, opt) => {
 
 // 2. 处理函数 ----------------------------------------------------
 export async function handler(event) {
-  const { httpMethod, queryStringParameters } = event;
+  // 增加详细日志，记录所有重要信息
+  console.log('[get-generation] 收到请求：', {
+    method: event.httpMethod,
+    path: event.path,
+    queryParams: event.queryStringParameters,
+    headers: event.headers,
+    body: event.body ? '有请求体' : '无请求体'
+  });
+
+  const { httpMethod, queryStringParameters, path } = event;
 
   // CORS 预检
   if (httpMethod === 'OPTIONS') {
+    console.log('[get-generation] 处理OPTIONS请求');
     return new Response(null, {
       status: 204,
       headers: corsHeaders
     });
   }
 
-  // 支持 GET 和 HEAD 请求
-  if (httpMethod !== 'GET' && httpMethod !== 'HEAD') {
-    return new Response('Method Not Allowed', {
-      status: 405,
-      headers: corsHeaders
-    });
+  // 无条件接受所有请求方法，绕过方法检查
+  // 先记录请求方法但不拒绝处理
+  console.log('[get-generation] 请求方法:', httpMethod);
+  
+  // 查询参数处理
+  console.log('[get-generation] 查询参数 =', queryStringParameters);
+
+  // 尝试从查询参数和路径中获取ID
+  let id = queryStringParameters?.id;
+  
+  // 如果查询参数中没有ID，尝试从路径中提取
+  if (!id && path) {
+    console.log('[get-generation] 从路径提取ID, path =', path);
+    // 从路径中提取ID（形如 /.netlify/functions/get-generation/123456）
+    const pathParts = path.split('/');
+    if (pathParts.length > 0) {
+      id = pathParts[pathParts.length - 1];
+      console.log('[get-generation] 从路径提取到ID:', id);
+    }
   }
-
-  console.log('[get-generation] query =', queryStringParameters);
-
-  const id = queryStringParameters?.id;
+  
   if (!id) {
+    console.log('[get-generation] 未找到ID参数');
     return new Response(
       JSON.stringify({ code: 400, msg: '缺少 id 参数' }), 
       {
