@@ -49,21 +49,36 @@ export async function handler(event) {
   const { httpMethod, queryStringParameters } = event;
 
   // CORS 预检
-  if (httpMethod === 'OPTIONS') return { statusCode: 204, headers: corsHeaders };
+  if (httpMethod === 'OPTIONS') {
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders
+    });
+  }
 
   // 支持 GET 和 HEAD 请求
-  if (httpMethod !== 'GET' && httpMethod !== 'HEAD')
-    return { statusCode: 405, headers: corsHeaders, body: 'Method Not Allowed' };
+  if (httpMethod !== 'GET' && httpMethod !== 'HEAD') {
+    return new Response('Method Not Allowed', {
+      status: 405,
+      headers: corsHeaders
+    });
+  }
 
   console.log('[get-generation] query =', queryStringParameters);
 
   const id = queryStringParameters?.id;
-  if (!id)
-    return {
-      statusCode: 400,
-      headers: corsHeaders,
-      body: JSON.stringify({ code: 400, msg: '缺少 id 参数' })
-    };
+  if (!id) {
+    return new Response(
+      JSON.stringify({ code: 400, msg: '缺少 id 参数' }), 
+      {
+        status: 400,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+  }
 
   // 如果有pending-前缀，移除前缀获取真实任务ID
   const taskId = id.startsWith('pending-') ? id.substring(8) : id;
@@ -83,14 +98,27 @@ export async function handler(event) {
     });
     const body = await response.text();
     console.log('[response]', body.slice(0, 300)); // 打印前 300 字方便排查
-    return { statusCode: response.status, headers: corsHeaders, body };
+    
+    // 返回Response对象
+    return new Response(body, {
+      status: response.status,
+      headers: {
+        ...corsHeaders,
+        'Content-Type': response.headers.get('Content-Type') || 'application/json'
+      }
+    });
   } catch (err) {
     console.error('[get-generation] error:', err.message);
-    return {
-      statusCode: 502,
-      headers: corsHeaders,
-      body: JSON.stringify({ code: 502, msg: err.message })
-    };
+    return new Response(
+      JSON.stringify({ code: 502, msg: err.message }), 
+      {
+        status: 502,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
   }
 }
 
