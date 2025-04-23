@@ -308,114 +308,151 @@ exports.handler = async function(event, context) {
       };
     }
 
-    // 处理嵌套响应结构 - 先检查是否是标准成功响应格式
-    if (data.code === 200) {
-      console.log('API返回成功响应，检查嵌套数据结构');
+    // 记录完整响应用于调试
+    console.log('API响应详情:', JSON.stringify(data, null, 2));
+    
+    // 用统一的方法获取ID
+    function extractIdFromResponse(responseData) {
+      console.log('尝试从响应中提取ID...');
       
       // 创建调试信息对象
       const debugInfo = {
-        original_structure: JSON.stringify(data)
+        original_structure: JSON.stringify(responseData)
       };
       
       // 检查各种可能的ID位置
-      if (data.data) {
-        if (data.data.task_id) {
-          // 方式1: 顶层任务ID
-          console.log('从data.data.task_id提取ID:', data.data.task_id);
-          data.id = data.data.task_id;
-          debugInfo.id_source = 'data.data.task_id';
-        } else if (data.data.data && Array.isArray(data.data.data) && data.data.data.length > 0 && data.data.data[0].id) {
-          // 方式2: 嵌套数组中的第一个项目ID
-          console.log('从data.data.data[0].id提取ID:', data.data.data[0].id);
-          data.id = data.data.data[0].id;
-          debugInfo.id_source = 'data.data.data[0].id';
-          
-          // 如果有音频URL，也提取出来
-          if (data.data.data[0].audio_url) {
-            data.audio_url = data.data.data[0].audio_url;
-            debugInfo.audio_url_source = 'data.data.data[0].audio_url';
+      // 1. 直接检查顶层id
+      if (responseData.id) {
+        console.log('响应直接包含id字段:', responseData.id);
+        debugInfo.id_source = 'direct id';
+        return { success: true, id: responseData.id, debugInfo };
+      }
+      
+      // 2. 检查code和data结构
+      if (responseData.code !== undefined) {
+        if (responseData.data) {
+          // 2.1 检查data.task_id
+          if (responseData.data.task_id) {
+            console.log('从data.task_id提取ID:', responseData.data.task_id);
+            debugInfo.id_source = 'data.task_id';
+            return { success: true, id: responseData.data.task_id, debugInfo };
           }
-        } else if (typeof data.data === 'string') {
-          // 方式3: data字段可能直接是ID字符串
-          console.log('data.data是字符串，可能是ID:', data.data);
-          data.id = data.data;
-          debugInfo.id_source = 'data.data (as string)';
+          
+          // 2.2 检查data.id
+          if (responseData.data.id) {
+            console.log('从data.id提取ID:', responseData.data.id);
+            debugInfo.id_source = 'data.id';
+            return { success: true, id: responseData.data.id, debugInfo };
+          }
+          
+          // 2.3 检查data.data数组
+          if (responseData.data.data && Array.isArray(responseData.data.data) && responseData.data.data.length > 0) {
+            if (responseData.data.data[0].id) {
+              console.log('从data.data[0].id提取ID:', responseData.data.data[0].id);
+              debugInfo.id_source = 'data.data[0].id';
+              
+              // 如果有音频URL，也提取出来
+              if (responseData.data.data[0].audio_url) {
+                responseData.audio_url = responseData.data.data[0].audio_url;
+                debugInfo.audio_url_source = 'data.data[0].audio_url';
+              }
+              
+              return { success: true, id: responseData.data.data[0].id, debugInfo };
+            }
+          }
+          
+          // 2.4 data字段是字符串，可能直接是ID
+          if (typeof responseData.data === 'string') {
+            console.log('data是字符串，可能是ID:', responseData.data);
+            debugInfo.id_source = 'data (string)';
+            return { success: true, id: responseData.data, debugInfo };
+          }
         }
       }
       
-      // 添加调试信息
-      data._debug_info = debugInfo;
+      console.log('无法从响应中提取ID');
+      return { success: false, debugInfo };
     }
-
-    // 检查响应是否包含ID
-    if (!data.id) {
-      console.error('API响应缺少ID字段:', JSON.stringify(data));
+    
+    // 使用提取方法
+    const extractResult = extractIdFromResponse(data);
+    
+    // 如果API不返回ID或找不到ID，但返回了成功状态码，创建一个临时ID
+    if (!extractResult.success && data.code === 200) {
+      console.log('API返回成功但无ID - 这是正常的！API使用回调机制');
       
-      // 如果API返回了成功状态码但没有ID，创建一个临时ID
-      if (data.code === 200 && data.msg === 'success') {
-        console.log('API返回成功但无ID，创建临时ID');
-        data.id = `temp-${Date.now()}`;
-        console.log('创建的临时ID:', data.id);
-        
-        // 继续正常流程，使用临时ID
-        console.log('使用临时ID继续生成流程:', data.id);
-        return {
-          statusCode: 200,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            ...data,
-            id: data.id,
-            _debug_info: {
-              original_response: data,
-              message: '使用临时ID继续处理',
-              note: '请检查回调URL，ID应该通过回调获取'
-            }
-          })
-        };
-      }
+      // 创建临时ID用于前端跟踪
+      const tempId = `pending-${Date.now()}`;
+      console.log('创建用于前端跟踪的临时ID:', tempId);
       
-      // 尝试从响应中获取其他信息
-      let errorDetail = '';
-      if (data.code && data.msg) {
-        errorDetail = `错误代码: ${data.code}, 错误信息: ${data.msg}`;
-      } else if (data.error) {
-        errorDetail = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
-      } else if (data.message) {
-        errorDetail = data.message;
-      }
-      
+      // 返回包含临时ID的成功响应
       return {
-        statusCode: 500,
+        statusCode: 200,
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ 
-          message: 'API响应缺少ID字段',
-          error: errorDetail,
-          response: data,
-          debug_info: {
-            request_url: requestUrl,
-            response_status: response.status,
-            response_content_type: response.headers.get('content-type')
+        body: JSON.stringify({
+          id: tempId,
+          status: 'PENDING',
+          progress: 0,
+          message: 'API请求已接受，请等待回调',
+          api_note: '该API使用异步处理，真实ID和结果将通过回调URL返回',
+          _debug_info: {
+            original_response: data,
+            note: '按照API文档，结果将通过回调URL返回',
+            callback_url: callBackUrl || DEFAULT_CALLBACK_URL
           }
         })
       };
     }
-
-    console.log('生成请求成功, 生成ID:', data.id);
     
-    // 返回API响应
+    // 提取成功，使用找到的ID
+    if (extractResult.success) {
+      console.log('成功提取ID:', extractResult.id);
+      data.id = extractResult.id;
+      data._debug_info = extractResult.debugInfo;
+      
+      // 返回API响应
+      return {
+        statusCode: 200,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+      };
+    }
+
+    // 如果执行到这里，说明API返回了非200状态或找不到ID
+    console.error('API响应缺少ID字段:', JSON.stringify(data));
+    
+    let errorDetail = '';
+    if (data.code && data.msg) {
+      errorDetail = `错误代码: ${data.code}, 错误信息: ${data.msg}`;
+    } else if (data.error) {
+      errorDetail = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+    } else if (data.message) {
+      errorDetail = data.message;
+    }
+    
     return {
-      statusCode: 200,
+      statusCode: 500,
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify(data)
+      body: JSON.stringify({ 
+        message: '无法从API响应中提取ID',
+        error: errorDetail,
+        note: '请检查回调URL设置，根据API文档，结果应通过回调获取',
+        response: data,
+        debug_info: {
+          request_url: requestUrl,
+          response_status: response.status,
+          callback_url: callBackUrl || DEFAULT_CALLBACK_URL
+        }
+      })
     };
   } catch (error) {
     console.error('处理请求出错:', error.message, error.stack);
