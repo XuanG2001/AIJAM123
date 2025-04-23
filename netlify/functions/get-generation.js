@@ -45,7 +45,7 @@ const fetchRetry = async (url, opt) => {
 };
 
 // 2. 处理函数 ----------------------------------------------------
-export default async function handler(event) {
+export async function handler(event) {
   const { httpMethod, queryStringParameters } = event;
 
   // CORS 预检
@@ -93,6 +93,9 @@ export default async function handler(event) {
     };
   }
 }
+
+// 添加默认导出以符合 Netlify Functions 的期望格式
+export default handler;
 
 
 // === netlify/functions/suno-callback.js ===
