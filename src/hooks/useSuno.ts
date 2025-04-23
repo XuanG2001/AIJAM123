@@ -74,29 +74,66 @@ localStorage.setItem('generationId', pendingId);
     if (!id) throw new Error('缺少 generationId');
     debugLog('checkGenerationStatus, id=', id);
 
-    // 先尝试直接访问测试接口，看是否能正常工作
+    // 尝试所有可能的方法获取状态
+
+    // 方法1: 恢复使用GET请求 + 查询参数 - 原始且可靠的方式
     try {
-      const testUrl = `${NETLIFY_TEST_PATH}?id=${encodeURIComponent(id)}`;
-      debugLog('测试测试接口:', testUrl);
-      const testRes = await fetch(testUrl, { method: 'GET' });
-      const testText = await testRes.text();
-      debugLog('测试接口响应:', testText.substr(0, 200));
+      const getUrl = `${NETLIFY_GET_GENERATION_PATH}?id=${encodeURIComponent(id)}`;
+      debugLog('尝试GET请求 + 查询参数:', getUrl);
+      const getRes = await fetch(getUrl, { method: 'GET' });
+      const getText = await getRes.text();
+      
+      if (getRes.ok) {
+        debugLog('GET请求成功:', getText.substr(0, 200));
+        const json = JSON.parse(getText);
+        setStatusDetails(json);
+        return json as GenerateResponse;
+      } else {
+        debugLog('GET请求失败:', getText);
+      }
     } catch (e) {
-      debugLog('测试接口错误:', e);
+      debugLog('GET请求出错:', e);
     }
 
-    // 尝试使用 POST 请求替代 GET 请求
-    debugLog('使用POST方法尝试请求状态');
-    const url = `${NETLIFY_GET_GENERATION_PATH}`;
-    const res = await fetch(url, {
-      method: 'POST',  // 使用 POST 替代 GET
+    // 方法2: 使用路径参数
+    try {
+      const pathUrl = `${NETLIFY_GET_GENERATION_PATH}/${encodeURIComponent(id)}`;
+      debugLog('尝试GET请求 + 路径参数:', pathUrl);
+      const pathRes = await fetch(pathUrl, { method: 'GET' });
+      const pathText = await pathRes.text();
+      
+      if (pathRes.ok) {
+        debugLog('路径参数请求成功:', pathText.substr(0, 200));
+        const json = JSON.parse(pathText);
+        setStatusDetails(json);
+        return json as GenerateResponse;
+      } else {
+        debugLog('路径参数请求失败:', pathText);
+      }
+    } catch (e) {
+      debugLog('路径参数请求出错:', e);
+    }
+
+    // 方法3: 使用POST请求 + ID在请求体中
+    debugLog('尝试POST请求 + 请求体:');
+    const postUrl = `${NETLIFY_GET_GENERATION_PATH}`;
+    const postBody = { 
+      id: id,
+      generationId: id, // 添加备用字段名
+      timestamp: new Date().getTime() // 添加时间戳防止缓存
+    };
+    debugLog('POST请求体:', postBody);
+    
+    const res = await fetch(postUrl, {
+      method: 'POST',
       headers: { 
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ id }) // 将 ID 放入请求体
+      body: JSON.stringify(postBody)
     });
+    
     const text = await res.text();
-    debugLog('原始响应文本:', text.substr(0, 200));
+    debugLog('POST请求响应:', text.substr(0, 200));
 
     // 405 或其他非 JSON 响应需先处理
     if (!res.ok) {
