@@ -1,5 +1,5 @@
 // === netlify/functions/suno-callback.js ===
-// 轻量回调：仅记录日志并返回 200，实际状态由前端轮询 get‑generation 获取
+// 轻量回调：仅记录日志并返回 200，实际状态由前端轮询 get-generation 获取
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -7,7 +7,7 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST,HEAD,OPTIONS'
 };
 
-export const handler = async (event) => {
+export default async function handler(event) {
   const { httpMethod } = event;
   
   // CORS 预检
@@ -67,4 +67,4 @@ export const handler = async (event) => {
       message: '回调已记录，请使用get-generation接口获取音乐状态'
     })
   };
-};
+}
