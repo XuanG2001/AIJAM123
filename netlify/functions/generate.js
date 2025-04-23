@@ -5,14 +5,14 @@
 const SUNO_API_URL = 'https://apibox.erweima.ai/api/v1/generate';
 const SUNO_API_KEY = process.env.SUNO_API_KEY || '54eb13895a8bd99af384da696d9f6419';
 
-// 请求超时设置 (60秒)
-const REQUEST_TIMEOUT = 60000;
+// 请求超时设置 (120秒)
+const REQUEST_TIMEOUT = 120000;
 
 // 最大重试次数
 const MAX_RETRIES = 2;
 
 // 默认回调URL (必需参数)
-const DEFAULT_CALLBACK_URL = 'https://aijam123.netlify.app/callback';
+const DEFAULT_CALLBACK_URL = 'https://aijam123.netlify.app/.netlify/functions/suno-callback';
 
 // 创建带超时的fetch
 const fetchWithTimeout = async (url, options, timeout = REQUEST_TIMEOUT) => {
@@ -310,7 +310,18 @@ exports.handler = async function(event, context) {
 
     // 检查响应是否包含ID
     if (!data.id) {
-      console.error('API响应缺少ID字段:', data);
+      console.error('API响应缺少ID字段:', JSON.stringify(data));
+      
+      // 尝试从响应中获取其他信息
+      let errorDetail = '';
+      if (data.code && data.msg) {
+        errorDetail = `错误代码: ${data.code}, 错误信息: ${data.msg}`;
+      } else if (data.error) {
+        errorDetail = typeof data.error === 'string' ? data.error : JSON.stringify(data.error);
+      } else if (data.message) {
+        errorDetail = data.message;
+      }
+      
       return {
         statusCode: 500,
         headers: {
@@ -319,7 +330,13 @@ exports.handler = async function(event, context) {
         },
         body: JSON.stringify({ 
           message: 'API响应缺少ID字段',
-          response: data
+          error: errorDetail,
+          response: data,
+          debug_info: {
+            request_url: requestUrl,
+            response_status: response.status,
+            response_content_type: response.headers.get('content-type')
+          }
         })
       };
     }
