@@ -97,32 +97,3 @@ export async function handler(event) {
 // 添加默认导出以符合 Netlify Functions 的期望格式
 export default handler;
 
-
-// === netlify/functions/suno-callback.js ===
-// 轻量回调：仅记录日志并返回 200，实际状态由前端轮询 get‑generation 获取
-
-const cbCors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'POST,OPTIONS'
-};
-
-export const handler = async (event) => {
-  // CORS 预检
-  if (event.httpMethod === 'OPTIONS')
-    return { statusCode: 204, headers: cbCors };
-
-  if (event.httpMethod !== 'POST')
-    return { statusCode: 405, headers: cbCors, body: 'Method Not Allowed' };
-
-  try {
-    console.log('[Suno callback] raw body:', event.body?.slice(0, 1000));
-  } catch (_) {}
-
-  return {
-    statusCode: 200,
-    headers: cbCors,
-    body: JSON.stringify({ success: true, mode: 'direct_api_query' })
-  };
-};
-
