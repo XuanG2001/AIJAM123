@@ -34,7 +34,7 @@ exports.handler = async function(event, context) {
 
     // 解析请求体
     const body = JSON.parse(event.body);
-    const { prompt, style, test, instrumental, model, title, tags, instrument, tempo, callBackUrl } = body;
+    const { prompt, style, test, instrumental, customMode, model, title, tags, instrument, tempo, callBackUrl } = body;
     
     console.log('请求正文:', JSON.stringify(body, null, 2));
     console.log('API密钥(前6位):', SUNO_API_KEY.substring(0, 6) + '...');
@@ -60,6 +60,18 @@ exports.handler = async function(event, context) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ message: '缺少必要参数: instrumental' })
+      };
+    }
+    
+    // 确保customMode参数存在 - API要求此参数必须存在
+    if (customMode === undefined || customMode === null) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ message: '缺少必要参数: customMode' })
       };
     }
 
@@ -88,7 +100,8 @@ exports.handler = async function(event, context) {
     // 构建请求体 - 确保包含所有必要参数
     const requestBody = {
       prompt: prompt,
-      instrumental: instrumental // 显式设置instrumental参数
+      instrumental: instrumental, // 显式设置instrumental参数
+      customMode: customMode // 显式设置customMode参数
     };
     
     // 添加其他可选参数
