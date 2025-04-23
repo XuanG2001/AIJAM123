@@ -135,6 +135,12 @@ export const useSuno = () => {
         debugLog('设置customMode默认值为false');
       }
       
+      // 确保callBackUrl参数存在（API必需参数）
+      if (!params.callBackUrl) {
+        params.callBackUrl = 'https://aijam123.netlify.app/callback'; // 设置默认回调URL
+        debugLog('设置callBackUrl默认值');
+      }
+      
       // 检查Netlify函数是否可访问
       if (typeof window !== 'undefined') {
         debugLog('生成API地址:', '/.netlify/functions/generate');
