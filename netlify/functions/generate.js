@@ -35,7 +35,7 @@ const fetchRetry = async (url, opts) => {
 };
 
 // 2. 主 handler ---------------------------------------------------
-export async function handler(event) {
+export async function handler(event, context) {
   // CORS 预检
   if (event.httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: corsHeaders };
@@ -179,5 +179,4 @@ export async function handler(event) {
   };
 }
 
-// 添加默认导出以符合 Netlify Functions 的期望格式
 export default handler;
