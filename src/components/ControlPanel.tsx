@@ -105,12 +105,27 @@ const ControlPanel = ({
       
       const params = getGenerateParams(activeInstrument);
       
+      if (params.customMode === undefined || params.customMode === null) {
+        params.customMode = false;
+      }
+      
+      if (params.instrumental === undefined || params.instrumental === null) {
+        params.instrumental = false;
+      }
+      
+      console.log('生成参数:', params);
+      
       await generate(params);
       
       clearNotes();
       
     } catch (err) {
       console.error(err);
+      toast({
+        title: '生成失败',
+        description: err instanceof Error ? err.message : '未知错误',
+        variant: 'destructive'
+      });
     } finally {
       setIsGenerating(false);
     }
