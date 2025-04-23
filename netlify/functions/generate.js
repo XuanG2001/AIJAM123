@@ -3,7 +3,7 @@
 
 // Suno API配置
 const SUNO_API_URL = 'https://apibox.erweima.ai/api/v1/generate';
-const SUNO_API_KEY = process.env.SUNO_API_KEY || '54eb13895a8bd99af384da696d9f6419';
+const SUNO_API_KEY = '54eb13895a8bd99af384da696d9f6419';
 
 exports.handler = async function(event, context) {
   try {
