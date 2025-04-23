@@ -2,15 +2,14 @@
 export async function handler(event) {
   // 处理预检请求
   if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
+    return new Response(null, {
+      status: 200,
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Methods': 'GET, OPTIONS'
-      },
-      body: ''
-    };
+      }
+    });
   }
 
   const envVars = {};
@@ -49,13 +48,8 @@ export async function handler(event) {
     }
   }
 
-  return {
-    statusCode: 200,
-    headers: {
-      'Access-Control-Allow-Origin': '*', 
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
+  return new Response(
+    JSON.stringify({
       message: '调试信息',
       timestamp: new Date().toISOString(),
       environment: process.env.NODE_ENV || '未知',
@@ -68,8 +62,15 @@ export async function handler(event) {
         keyConfigured: sunoApiConnectible,
         connectionTest: sunoConnectionTest
       }
-    })
-  };
+    }),
+    {
+      status: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*', 
+        'Content-Type': 'application/json'
+      }
+    }
+  );
 }
 
 export default handler; 
