@@ -12,7 +12,7 @@ const MAX_RETRY = 2; // 最多重试 2 次（共 3 次请求）
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'GET,HEAD,OPTIONS'
+  'Access-Control-Allow-Methods': 'GET,HEAD,OPTIONS,POST'
 };
 
 // Fetch with timeout helper
@@ -55,7 +55,7 @@ export async function handler(event) {
     body: event.body ? '有请求体' : '无请求体'
   });
 
-  const { httpMethod, queryStringParameters, path } = event;
+  const { httpMethod, queryStringParameters, path, body } = event;
 
   // CORS 预检
   if (httpMethod === 'OPTIONS') {
@@ -72,11 +72,29 @@ export async function handler(event) {
   
   // 查询参数处理
   console.log('[get-generation] 查询参数 =', queryStringParameters);
+  
+  // 处理请求体 - 如果是 POST 请求，尝试从请求体获取ID
+  let bodyData = null;
+  if (body) {
+    try {
+      console.log('[get-generation] 正在解析请求体:', body);
+      bodyData = JSON.parse(body);
+      console.log('[get-generation] 请求体数据:', bodyData);
+    } catch (e) {
+      console.error('[get-generation] 请求体解析错误:', e.message);
+    }
+  }
 
-  // 尝试从查询参数和路径中获取ID
+  // 尝试从三个来源获取ID：查询参数、路径参数和请求体
   let id = queryStringParameters?.id;
   
-  // 如果查询参数中没有ID，尝试从路径中提取
+  // 如果查询参数中没有ID，尝试从请求体中获取
+  if (!id && bodyData?.id) {
+    id = bodyData.id;
+    console.log('[get-generation] 从请求体提取到ID:', id);
+  }
+  
+  // 如果请求体中没有ID，尝试从路径中提取
   if (!id && path) {
     console.log('[get-generation] 从路径提取ID, path =', path);
     // 从路径中提取ID（形如 /.netlify/functions/get-generation/123456）
