@@ -46,6 +46,7 @@ const getApiPath = (path: string, id?: string) => {
           console.error('错误: 尝试获取生成状态时ID未定义');
           return ''; // 返回空字符串，调用处需要检查
         }
+        // 不要处理ID，直接使用原始ID（保留pending-前缀）
         return `${NETLIFY_GET_GENERATION_PATH}?id=${id}`;
       case '/v1/generate/extend':
         return NETLIFY_EXTEND_PATH;
@@ -278,44 +279,54 @@ export const useSuno = () => {
       throw new Error('生成ID为空');
     }
     
-    debugLog('检查生成状态, ID:', id);
+    // 详细记录ID
+    debugLog('检查生成状态, 完整ID:', id);
+    debugLog('ID是否带前缀:', id.startsWith('pending-') ? '是' : '否');
+    
+    // 确保ID非空，且不对ID进行任何修改
     const apiPath = getApiPath(`/v1/generate/${id}`, id);
     
     if (!apiPath) {
       throw new Error('无效的API路径');
     }
     
-    debugLog('请求API路径:', apiPath);
-    const response = await fetch(apiPath);
+    debugLog('请求完整API路径:', apiPath);
     
-    if (!response.ok) {
-      // 尝试解析响应以获取具体错误
-      let errorMessage = '检查生成状态时出错';
-      try {
-        const errorData = await response.json();
-        errorMessage = errorData.message || errorMessage;
-        debugLog('API错误详情:', errorData);
-      } catch (e) {
-        errorMessage += ` (${response.status})`;
+    try {
+      const response = await fetch(apiPath);
+      
+      if (!response.ok) {
+        // 尝试解析响应以获取具体错误
+        let errorMessage = '检查生成状态时出错';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.msg || errorMessage;
+          debugLog('API错误详情:', errorData);
+        } catch (e) {
+          errorMessage += ` (${response.status})`;
+        }
+        throw new Error(errorMessage);
       }
-      throw new Error(errorMessage);
+      
+      const data: GenerateResponse = await response.json();
+      debugLog('生成状态响应:', data);
+      
+      // 记录响应详情，用于调试
+      setStatusDetails(data);
+      
+      // 如果API返回的数据缺少id，但有audio_url，添加一个临时id
+      if (!data.id && data.audio_url) {
+        debugLog('API返回数据缺少ID但有音频URL，添加临时ID');
+        data.id = `temp-id-${Date.now()}`;
+        data.status = 'COMPLETE';
+        data.progress = 1;
+      }
+      
+      return data;
+    } catch (error) {
+      debugLog('检查生成状态出错:', error);
+      throw error;
     }
-    
-    const data: GenerateResponse = await response.json();
-    debugLog('生成状态:', data);
-    
-    // 记录响应详情，用于调试
-    setStatusDetails(data);
-    
-    // 如果API返回的数据缺少id，但有audio_url，添加一个临时id
-    if (!data.id && data.audio_url) {
-      debugLog('API返回数据缺少ID但有音频URL，添加临时ID');
-      data.id = `temp-id-${Date.now()}`;
-      data.status = 'COMPLETE';
-      data.progress = 1;
-    }
-    
-    return data;
   }, []);
 
   // 轮询生成状态
