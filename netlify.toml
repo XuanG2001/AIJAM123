@@ -25,11 +25,7 @@
   status = 200
   force = true
 
-[[redirects]]
-  from = "/api/v1/generate/:id"
-  to = "/.netlify/functions/get-generation/:id"
-  status = 200
-  force = true
+#
 
 [[redirects]]
   from = "/api/v1/generate/extend"
