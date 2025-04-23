@@ -10,41 +10,44 @@ export async function handler(event, context) {
   
   // 处理 OPTIONS 请求
   if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
+    return new Response(null, {
+      status: 200,
       headers: {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
         'Access-Control-Allow-Methods': 'POST, OPTIONS'
-      },
-      body: ''
-    };
+      }
+    });
   }
   
   // 只接受 POST 方法
   if (event.httpMethod !== 'POST') {
     console.log('非POST请求被拒绝');
-    return {
-      statusCode: 405,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ message: '方法不允许' })
-    };
+    return new Response(
+      JSON.stringify({ message: '方法不允许' }),
+      {
+        status: 405,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json'
+        }
+      }
+    );
   }
   
   try {
     if (!SUNO_API_KEY) {
       console.error('未设置SUNO_API_KEY环境变量');
-      return {
-        statusCode: 500,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ message: '未设置 SUNO_API_KEY 环境变量' })
-      };
+      return new Response(
+        JSON.stringify({ message: '未设置 SUNO_API_KEY 环境变量' }),
+        {
+          status: 500,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json'
+          }
+        }
+      );
     }
     
     // 解析请求体
@@ -54,14 +57,16 @@ export async function handler(event, context) {
     const { id } = requestBody;
     if (!id) {
       console.error('缺少ID字段');
-      return {
-        statusCode: 400,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ message: '请求中缺少id字段' })
-      };
+      return new Response(
+        JSON.stringify({ message: '请求中缺少id字段' }),
+        {
+          status: 400,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json'
+          }
+        }
+      );
     }
     
     console.log('正在延长音乐，ID:', id);
@@ -83,36 +88,42 @@ export async function handler(event, context) {
         errorData = { message: `状态码 ${statusCode}: ${response.statusText}` };
       }
       console.error('Suno API返回错误:', statusCode, errorData);
-      return {
-        statusCode: statusCode,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ message: errorData.message || '请求 Suno API 失败' })
-      };
+      return new Response(
+        JSON.stringify({ message: errorData.message || '请求 Suno API 失败' }),
+        {
+          status: statusCode,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json'
+          }
+        }
+      );
     }
     
     const data = await response.json();
     console.log('延长成功，返回ID:', data.id);
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    };
+    return new Response(
+      JSON.stringify(data),
+      {
+        status: 200,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json'
+        }
+      }
+    );
   } catch (error) {
     console.error('延长音乐出错:', error.message, error.stack);
-    return {
-      statusCode: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ message: '内部服务器错误: ' + error.message })
-    };
+    return new Response(
+      JSON.stringify({ message: '内部服务器错误: ' + error.message }),
+      {
+        status: 500,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json'
+        }
+      }
+    );
   }
 }
 
