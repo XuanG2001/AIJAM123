@@ -113,6 +113,8 @@ const ControlPanel = ({
         params.instrumental = false;
       }
       
+      params.callBackUrl = window.location.origin + '/callback';
+      
       console.log('生成参数:', params);
       
       await generate(params);
