@@ -107,7 +107,56 @@ exports.handler = async function(event, context) {
     
     // 处理pending-前缀的临时ID（表示API请求已接受但通过回调返回结果）
     if (id.startsWith('pending-')) {
-      console.log('检测到pending临时ID，返回等待状态');
+      console.log('检测到pending临时ID，检查是否有关联的回调数据');
+      
+      // 尝试从回调处理函数获取结果
+      try {
+        // 构建回调查询URL
+        const callbackCheckUrl = `/.netlify/functions/suno-callback?result_id=${id.replace('pending-', '')}`;
+        console.log('检查回调数据:', callbackCheckUrl);
+        
+        // 请求回调数据
+        const callbackResponse = await fetch(callbackCheckUrl, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (callbackResponse.ok) {
+          const callbackData = await callbackResponse.json();
+          console.log('回调检查结果:', JSON.stringify(callbackData, null, 2));
+          
+          // 如果回调数据存在
+          if (callbackData.success && callbackData.has_data) {
+            console.log('找到回调数据，返回完成状态');
+            
+            const result = {
+              id: id,
+              status: callbackData.callback_data.status || 'COMPLETE',
+              progress: callbackData.callback_data.progress || 1.0,
+              message: '任务已完成，回调数据已接收',
+              callback_data: callbackData.callback_data.audio_data,
+              _source: 'callback'
+            };
+            
+            return {
+              statusCode: 200,
+              headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(result)
+            };
+          }
+        }
+      } catch (callbackError) {
+        console.log('检查回调数据时出错:', callbackError.message);
+        // 如果出错，继续使用默认的pending响应
+      }
+      
+      // 如果没有找到回调数据，返回等待状态
+      console.log('未找到回调数据，返回等待状态');
       return {
         statusCode: 200,
         headers: {
@@ -119,7 +168,8 @@ exports.handler = async function(event, context) {
           status: 'PENDING',
           progress: 0.2,
           message: '任务正在处理中，请等待回调',
-          api_note: '根据API文档，音乐生成是异步过程，结果将通过回调返回'
+          api_note: '根据API文档，音乐生成是异步过程，结果将通过回调返回',
+          _source: 'pending'
         })
       };
     }
