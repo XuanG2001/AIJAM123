@@ -51,7 +51,7 @@ export async function handler(event) {
     method: event.httpMethod,
     path: event.path,
     queryParams: event.queryStringParameters,
-    headers: event.headers,
+    headers: Object.keys(event.headers),
     body: event.body ? '有请求体' : '无请求体'
   });
 
@@ -66,63 +66,89 @@ export async function handler(event) {
     });
   }
 
-  // 无条件接受所有请求方法，绕过方法检查
-  // 先记录请求方法但不拒绝处理
-  console.log('[get-generation] 请求方法:', httpMethod);
+  // 详细记录POST请求的请求体
+  if (httpMethod === 'POST' && body) {
+    console.log('[get-generation] POST请求体原始内容:', body);
+  }
   
   // 查询参数处理
   console.log('[get-generation] 查询参数 =', queryStringParameters);
   
-  // 处理请求体 - 如果是 POST 请求，尝试从请求体获取ID
+  // 处理请求体 - 如果有请求体，尝试从请求体获取ID
   let bodyData = null;
   if (body) {
     try {
-      console.log('[get-generation] 正在解析请求体:', body);
+      console.log('[get-generation] 正在解析请求体...');
       bodyData = JSON.parse(body);
-      console.log('[get-generation] 请求体数据:', bodyData);
+      console.log('[get-generation] 请求体解析结果:', JSON.stringify(bodyData));
     } catch (e) {
-      console.error('[get-generation] 请求体解析错误:', e.message);
+      console.error('[get-generation] 请求体解析错误:', e.message, '原始体:', body);
     }
   }
 
-  // 尝试从三个来源获取ID：查询参数、路径参数和请求体
-  let id = queryStringParameters?.id;
+  // 尝试从多个来源获取ID 
+  let id = null;
   
-  // 如果查询参数中没有ID，尝试从请求体中获取
-  if (!id && bodyData?.id) {
-    id = bodyData.id;
-    console.log('[get-generation] 从请求体提取到ID:', id);
+  // 1. 首先从查询参数获取
+  if (queryStringParameters) {
+    id = queryStringParameters.id || 
+         queryStringParameters.generationId || 
+         queryStringParameters.generation_id || 
+         queryStringParameters.ID;
+         
+    if (id) console.log('[get-generation] 从查询参数获取ID:', id);
   }
   
-  // 如果请求体中没有ID，尝试从路径中提取
+  // 2. 如果查询参数没有，从请求体获取
+  if (!id && bodyData) {
+    // 检查各种可能的字段名称
+    const possibleFields = ['id', 'generationId', 'generation_id', 'ID', 'Id'];
+    
+    for (const field of possibleFields) {
+      if (bodyData[field]) {
+        id = bodyData[field];
+        console.log(`[get-generation] 从请求体中的 '${field}' 字段获取ID:`, id);
+        break;
+      }
+    }
+    
+    // 如果找不到，整个打印请求体便于调试
+    if (!id) {
+      console.log('[get-generation] 请求体中未找到ID，请求体字段:', Object.keys(bodyData));
+    }
+  }
+  
+  // 3. 最后尝试从路径获取
   if (!id && path) {
-    console.log('[get-generation] 从路径提取ID, path =', path);
-    // 改进路径解析逻辑，避免误识别函数名为ID
+    console.log('[get-generation] 尝试从路径获取ID, path =', path);
     const pathParts = path.split('/');
-    // 检查路径格式是否符合预期的"/.netlify/functions/get-generation/ID"模式
+    console.log('[get-generation] 路径部分:', pathParts);
+    
     if (pathParts.length > 4 && pathParts[3] === 'get-generation') {
-      id = pathParts[4]; // 第5个元素应该是ID
-      console.log('[get-generation] 从路径提取到ID:', id);
-    } else {
-      // 如果路径不符合预期格式，记录详细信息
-      console.log('[get-generation] 路径格式不符合预期，无法提取ID');
-      console.log('[get-generation] 路径部分:', pathParts);
+      if (pathParts[4] && pathParts[4].length > 5) {
+        id = pathParts[4];
+        console.log('[get-generation] 从路径获取ID:', id);
+      }
     }
   }
 
-  // 检查 POST 请求体 - 特殊处理 GET 请求已改为 POST 的情况
-  if (!id && httpMethod === 'POST' && bodyData) {
-    console.log('[get-generation] 尝试从POST请求中提取ID细节');
-    
-    // 直接打印完整的请求体结构，帮助调试
-    console.log('[get-generation] 完整请求体结构:', JSON.stringify(bodyData));
-    
-    // 尝试获取任何可能的ID字段
-    const possibleId = bodyData.id || bodyData.ID || bodyData.Id || bodyData.generationId;
-    if (possibleId) {
-      id = possibleId;
-      console.log('[get-generation] 从请求体中找到可能的ID字段:', id);
-    }
+  // 测试请求处理
+  if (queryStringParameters?.test === 'true') {
+    console.log('[get-generation] 处理测试请求');
+    return new Response(
+      JSON.stringify({ 
+        code: 200, 
+        msg: '测试成功',
+        detail: '服务器正常运行' 
+      }), 
+      {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
   }
   
   if (!id) {
