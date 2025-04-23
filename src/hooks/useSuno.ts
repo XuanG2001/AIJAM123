@@ -123,6 +123,12 @@ export const useSuno = () => {
       
       debugLog('开始生成音乐，参数:', params);
       
+      // 确保必要参数存在
+      if (params.instrumental === undefined || params.instrumental === null) {
+        params.instrumental = false; // 设置默认值
+        debugLog('设置instrumental默认值为false');
+      }
+      
       // 检查Netlify函数是否可访问
       if (typeof window !== 'undefined') {
         debugLog('生成API地址:', '/.netlify/functions/generate');
@@ -149,21 +155,37 @@ export const useSuno = () => {
         throw new Error(`解析API响应失败: ${responseText.substring(0, 100)}...`);
       }
       
+      // 保存响应详情，用于调试
+      setStatusDetails(data);
+      
       // 检查API响应状态
       if (!response.ok) {
         const statusCode = response.status;
         debugLog('API响应错误:', statusCode, data);
         
         // 显示具体的API错误信息
-        const errorMsg = data.message || `API请求失败(${statusCode})`;
+        let errorMsg = data.message || `API请求失败(${statusCode})`;
+        
+        // 处理apibox.erweima.ai的特定错误格式
+        if (data.error && data.error.code !== undefined && data.error.msg) {
+          errorMsg = `API错误(${data.error.code}): ${data.error.msg}`;
+        } else if (data.response && data.response.code !== undefined && data.response.msg) {
+          errorMsg = `API错误(${data.response.code}): ${data.response.msg}`;
+        }
+        
         setError(errorMsg);
         throw new Error(errorMsg);
       }
       
       debugLog('生成初始响应:', data);
       
-      // 保存响应详情，用于调试
-      setStatusDetails(data);
+      // 检查ID字段
+      if (!data.id) {
+        const errorMsg = '返回数据缺少ID字段，无法继续处理';
+        debugLog('错误:', errorMsg, data);
+        setError(errorMsg);
+        throw new Error(errorMsg);
+      }
       
       setGenerationId(data.id);
       localStorage.setItem('generationId', data.id);
