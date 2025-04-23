@@ -29,14 +29,46 @@ exports.handler = async function(event, context) {
   }
   
   try {
-    // 记录回调数据
-    console.log('收到Suno API回调:', event.body);
+    // 记录完整回调数据
+    console.log('收到Suno API回调，原始数据:', event.body);
     
     // 解析请求体
     let bodyData;
     try {
       bodyData = JSON.parse(event.body);
-      console.log('回调数据解析成功:', bodyData);
+      console.log('回调数据解析成功');
+      
+      // 记录完整的数据结构
+      console.log('回调数据结构:', JSON.stringify(bodyData, null, 2));
+      
+      // 分析回调数据结构
+      if (bodyData.code === 200) {
+        console.log('回调状态码: 200 (成功)');
+        
+        // 提取关键信息
+        if (bodyData.data) {
+          if (bodyData.data.task_id) {
+            console.log('任务ID:', bodyData.data.task_id);
+          }
+          
+          if (bodyData.data.callbackType) {
+            console.log('回调类型:', bodyData.data.callbackType);
+          }
+          
+          if (bodyData.data.data && Array.isArray(bodyData.data.data)) {
+            console.log('生成的音频数量:', bodyData.data.data.length);
+            
+            // 记录每个音频的信息
+            bodyData.data.data.forEach((item, index) => {
+              console.log(`音频 #${index+1} ID:`, item.id);
+              console.log(`音频 #${index+1} URL:`, item.audio_url);
+              console.log(`音频 #${index+1} 时长:`, item.duration);
+            });
+          }
+        }
+      } else {
+        console.log('回调状态码:', bodyData.code, '消息:', bodyData.msg);
+      }
     } catch (e) {
       console.log('回调内容非JSON格式:', event.body);
     }
@@ -50,7 +82,10 @@ exports.handler = async function(event, context) {
         'Access-Control-Allow-Origin': '*',
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ success: true })
+      body: JSON.stringify({ 
+        success: true,
+        message: '回调已接收并处理'
+      })
     };
   } catch (error) {
     console.error('处理回调出错:', error.message, error.stack);
