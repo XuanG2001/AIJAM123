@@ -99,6 +99,9 @@ const useJamStore = create<JamState>((set, get) => ({
         : `${state.prompt}\n\nNotes played: ${notesDescription}\nTempo: ${state.tempo} BPM`;
     }
     
+    // 设置默认回调URL - 这将在ControlPanel中被覆盖
+    const defaultCallbackUrl = 'https://aijam123.netlify.app/callback';
+    
     return {
       customMode: state.customMode,
       instrumental: state.instrumental,
@@ -108,7 +111,8 @@ const useJamStore = create<JamState>((set, get) => ({
       title: state.customMode ? state.title : undefined,
       tags: state.tags || undefined,
       instrument,
-      tempo: state.tempo
+      tempo: state.tempo,
+      callBackUrl: defaultCallbackUrl
     };
   }
 }));
