@@ -1,195 +1,94 @@
-// 注意Node.js 18+已经内置了fetch API
-// const fetch = require('node-fetch');
+// === netlify/functions/get-generation.js ===
+// 代理 Suno “record-info” 接口，返回生成进度或最终 audio_url
+// 依赖环境变量 SUNO_API_KEY (Netlify → Site settings → Env vars)
 
-// 使用正确的API基础URL
-const SUNO_API_BASE_URL = 'https://apibox.erweima.ai/api/v1/generate/';
-const SUNO_RECORD_INFO_URL = 'https://apibox.erweima.ai/api/v1/generate/record-info';
-// API密钥 
-const SUNO_API_KEY = process.env.SUNO_API_KEY || '54eb13895a8bd99af384da696d9f6419';
-// 移除Netlify Blobs导入和内存存储相关代码
+// 1. 常量与工具 --------------------------------------------------
+const SUNO_RECORD_INFO_URL =
+  'https://apibox.erweima.ai/api/v1/generate/record-info';
 
-// 请求超时设置 (30秒)
-const REQUEST_TIMEOUT = 30000;
+// 请求 10 s 超时
+const TIMEOUT_MS = 10_000;
+// 最多重试 3 次（含首次）
+const MAX_RETRY = 2;
 
-// 最大重试次数
-const MAX_RETRIES = 1;
+/**
+ * fetch with timeout (AbortController)
+ */
+const fetchTimeout = (url, opt = {}, ms = TIMEOUT_MS) =>
+  new Promise((resolve, reject) => {
+    const ctl = new AbortController();
+    const id = setTimeout(() => ctl.abort(), ms);
+    fetch(url, { ...opt, signal: ctl.signal })
+      .then((r) => {
+        clearTimeout(id);
+        resolve(r);
+      })
+      .catch((e) => {
+        clearTimeout(id);
+        reject(e);
+      });
+  });
 
-// 创建带超时的fetch
-const fetchWithTimeout = async (url, options, timeout = REQUEST_TIMEOUT) => {
-  const controller = new AbortController();
-  const { signal } = controller;
-  
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-  
-  try {
-    const response = await fetch(url, { ...options, signal });
-    clearTimeout(timeoutId);
-    return response;
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-      throw new Error(`请求超时 (${timeout/1000}秒)`);
-    }
-    throw error;
-  }
-};
-
-// 创建带重试的fetch
-const fetchWithRetry = async (url, options, maxRetries = MAX_RETRIES) => {
-  let lastError;
-  
-  for (let i = 0; i <= maxRetries; i++) {
+/**
+ * 简单指数退避重试
+ */
+const fetchRetry = async (url, opt) => {
+  for (let i = 0; i <= MAX_RETRY; i++) {
     try {
-      if (i > 0) {
-        console.log(`第${i}次重试请求...`);
-      }
-      
-      // 使用带超时的fetch
-      return await fetchWithTimeout(url, options);
-    } catch (error) {
-      console.error(`请求失败 (尝试 ${i+1}/${maxRetries+1}):`, error.message);
-      lastError = error;
-      
-      // 如果不是最后一次尝试，等待一段时间再重试
-      if (i < maxRetries) {
-        const delay = 1000 * Math.pow(2, i); // 指数退避: 1s, 2s, 4s, ...
-        console.log(`等待${delay/1000}秒后重试...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
+      if (i) console.log(`[retry ${i}] ${url}`);
+      return await fetchTimeout(url, opt);
+    } catch (e) {
+      if (i === MAX_RETRY) throw e;
+      await new Promise((r) => setTimeout(r, 1000 * 2 ** i));
     }
   }
-  
-  // 所有重试都失败了
-  throw lastError;
 };
 
-// 直接代理Suno API的record-info接口
-// 轻量级实现，专注于获取音频URL
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Methods': 'GET,OPTIONS'
+};
 
-// 简单的超时设置
-const TIMEOUT = 10000; // 10秒
+// 2. 处理函数 ----------------------------------------------------
+export const handler = async (event) => {
+  const { httpMethod, queryStringParameters } = event;
 
-exports.handler = async function(event, context) {
-  // 处理OPTIONS预检请求
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS'
-      },
-      body: ''
-    };
-  }
+  // CORS 预检
+  if (httpMethod === 'OPTIONS') return { statusCode: 204, headers: corsHeaders };
 
-  // 只处理GET请求
-  if (event.httpMethod !== 'GET') {
-    return {
-      statusCode: 405,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ message: '仅支持GET请求' })
-    };
-  }
+  // 仅支持 GET
+  if (httpMethod !== 'GET')
+    return { statusCode: 405, headers: corsHeaders, body: 'Method Not Allowed' };
 
-  // 获取任务ID
-  const { id } = event.queryStringParameters || {};
-  if (!id) {
+  const id = queryStringParameters?.id;
+  if (!id)
     return {
       statusCode: 400,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ message: '缺少必要参数: id' })
+      headers: corsHeaders,
+      body: JSON.stringify({ code: 400, msg: '缺少 id 参数' })
     };
-  }
 
-  console.log('查询音乐生成状态, ID:', id);
-  
-  // 处理测试ID
-  if (id === 'test-request') {
-    console.log('返回测试响应');
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        code: 200,
-        msg: "获取成功",
-        data: {
-          status: "SUCCESS",
-          progress: 1,
-          data: [
-            {
-              id: "test-song-1",
-              audio_url: "https://example.com/test-song.mp3",
-              duration: 180
-            }
-          ]
-        }
-      })
-    };
-  }
-  
-  // 移除pending-前缀（如果有）获取真实任务ID
-  const taskId = id.startsWith('pending-') ? id.replace('pending-', '') : id;
-  
-  // 构建API请求
-  const apiUrl = `${SUNO_RECORD_INFO_URL}?id=${taskId}`;
-  console.log(`请求Suno API:`, apiUrl);
-  
+  // Suno 需要完整 pending- 前缀，故 **不再剥离**
+  const api = `${SUNO_RECORD_INFO_URL}?id=${encodeURIComponent(id)}`;
+  console.log('[get-generation] =>', api);
+
   try {
-    // 设置请求参数
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT);
-    
-    // 发送请求到Suno API
-    const response = await fetch(apiUrl, {
-      method: 'GET',
+    const raw = await fetchRetry(api, {
       headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': `Bearer ${SUNO_API_KEY}`
-      },
-      signal: controller.signal
+        Accept: 'application/json',
+        Authorization: `Bearer ${process.env.SUNO_API_KEY}`
+      }
     });
-    
-    clearTimeout(timeoutId);
-    
-    // 解析响应
-    const data = await response.json();
-    console.log('Suno API响应:', response.status);
-    
-    // 直接返回API响应给前端
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    };
-  } catch (error) {
-    console.error('获取音乐状态出错:', error);
-    
-    // 返回错误信息
+
+    const text = await raw.text(); // 直接转发文本，保留 Suno 原始格式
+    return { statusCode: raw.status, headers: corsHeaders, body: text };
+  } catch (err) {
+    console.error('[get-generation] error:', err.message);
     return {
       statusCode: 502,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        code: 502,
-        msg: `获取音乐状态失败: ${error.message}`,
-        error: error.message
-      })
+      headers: corsHeaders,
+      body: JSON.stringify({ code: 502, msg: err.message })
     };
   }
-}; 
+};
