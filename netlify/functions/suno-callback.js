@@ -12,25 +12,33 @@ export async function handler(event) {
   
   // CORS 预检
   if (httpMethod === 'OPTIONS')
-    return { statusCode: 204, headers: corsHeaders };
+    return new Response(null, { 
+      status: 204, 
+      headers: corsHeaders 
+    });
 
   // 支持 POST 和 HEAD 请求
   if (httpMethod !== 'POST' && httpMethod !== 'HEAD')
-    return { 
-      statusCode: 405, 
-      headers: corsHeaders, 
-      body: JSON.stringify({ error: 'Method Not Allowed' })
-    };
+    return new Response(
+      JSON.stringify({ error: 'Method Not Allowed' }), 
+      { 
+        status: 405, 
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        } 
+      }
+    );
 
   console.log('[suno-callback] 请求方法:', httpMethod);
 
   // 对于 HEAD 请求，只返回头部信息，不返回body
   if (httpMethod === 'HEAD') {
     console.log('[suno-callback] 处理HEAD请求');
-    return {
-      statusCode: 200,
-      headers: corsHeaders
-    };
+    return new Response(null, { 
+      status: 200, 
+      headers: corsHeaders 
+    });
   }
 
   // 处理POST请求
@@ -58,15 +66,20 @@ export async function handler(event) {
   }
 
   // 简单返回成功响应
-  return {
-    statusCode: 200,
-    headers: corsHeaders,
-    body: JSON.stringify({ 
+  return new Response(
+    JSON.stringify({ 
       success: true, 
       mode: 'direct_api_query',
       message: '回调已记录，请使用get-generation接口获取音乐状态'
-    })
-  };
+    }), 
+    { 
+      status: 200, 
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      } 
+    }
+  );
 }
 
 // 添加默认导出以符合 Netlify Functions 的期望格式
