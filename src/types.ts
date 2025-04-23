@@ -19,7 +19,7 @@ export type GenerateParams = {
   tags?: string;
   instrument: InstrumentType;
   tempo?: number;
-  callBackUrl?: string;
+  callBackUrl: string;
   test?: boolean;
 };
 
