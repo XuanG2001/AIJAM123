@@ -1,5 +1,5 @@
 // === netlify/functions/get-generation.js ===
-// 代理 Suno “record-info” 接口，返回生成进度或最终 audio_url
+// 代理 Suno "record-info" 接口，返回生成进度或最终 audio_url
 // 依赖环境变量 SUNO_API_KEY (Netlify → Site settings → Env vars)
 
 // 1. 常量与工具 --------------------------------------------------
@@ -69,9 +69,13 @@ export const handler = async (event) => {
       body: JSON.stringify({ code: 400, msg: '缺少 id 参数' })
     };
 
-  // Suno 需要完整 pending- 前缀，故 **不再剥离**
-  const api = `${SUNO_RECORD_INFO_URL}?id=${encodeURIComponent(id)}`;
-  console.log('[get-generation] =>', api);
+  // 如果有pending-前缀，移除前缀获取真实任务ID
+  const taskId = id.startsWith('pending-') ? id.substring(8) : id;
+  
+  // 构建API请求URL
+  const api = `${SUNO_RECORD_INFO_URL}?id=${encodeURIComponent(taskId)}`;
+  console.log('[get-generation] 原始ID:', id, '处理后ID:', taskId);
+  console.log('[get-generation] API请求:', api);
 
   try {
     const raw = await fetchRetry(api, {
