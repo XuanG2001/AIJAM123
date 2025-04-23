@@ -69,11 +69,11 @@ localStorage.setItem('generationId', pendingId);
     return data as GenerateResponse;
   }, []);
 
-  // 2. 单次查询状态 - 紧急修复版本
+  // 2. 单次查询状态 - 修复版本，只使用查询参数方式
   const checkGenerationStatus = useCallback(async (id: string): Promise<GenerateResponse> => {
     if (!id) throw new Error('缺少 generationId');
     
-    // 紧急修复 - 显示更详细的ID信息
+    // 显示详细ID信息以便调试
     debugLog('检查状态，ID详情:', {
       idValue: id,
       idType: typeof id,
@@ -81,35 +81,15 @@ localStorage.setItem('generationId', pendingId);
       idStartsWith: id.startsWith('pending-') ? 'pending-' : '其他'
     });
     
-    // 使用同步XHR请求作为紧急备选方案（仅开发环境）
-    debugLog('紧急备选: 尝试同步XHR');
-    try {
-      const xhr = new XMLHttpRequest();
-      xhr.open('GET', `${NETLIFY_GET_GENERATION_PATH}?id=${encodeURIComponent(id)}`, false); // 同步请求
-      xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.send();
-      
-      debugLog('XHR状态:', xhr.status);
-      if (xhr.status >= 200 && xhr.status < 300) {
-        const response = JSON.parse(xhr.responseText);
-        debugLog('XHR响应成功:', response);
-        return response;
-      } else {
-        debugLog('XHR请求失败:', xhr.responseText);
-      }
-    } catch (e) {
-      debugLog('XHR请求出错:', e);
-    }
-    
-    // 构建一个更可靠的URL（直接）
-    // 备选：使用带有时间戳的完整查询参数字符串
-    const reliableUrl = `${NETLIFY_GET_GENERATION_PATH}?id=${encodeURIComponent(id)}&_t=${Date.now()}`;
-    debugLog('尝试可靠URL:', reliableUrl);
+    // 统一使用查询参数方式构造URL
+    const queryUrl = `${NETLIFY_GET_GENERATION_PATH}?id=${encodeURIComponent(id)}&_t=${Date.now()}`;
+    debugLog('使用查询参数方式 GET 请求:', queryUrl);
     
     try {
-      const res = await fetch(reliableUrl, {
+      const res = await fetch(queryUrl, {
         method: 'GET',
         headers: {
+          'Content-Type': 'application/json',
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
           'Expires': '0'
@@ -117,7 +97,7 @@ localStorage.setItem('generationId', pendingId);
       });
       
       const text = await res.text();
-      debugLog('可靠URL响应:', text.substr(0, 200));
+      debugLog('GET 请求响应:', text.substr(0, 200));
       
       if (!res.ok) {
         throw new Error(`状态码 ${res.status}: ${text}`);
@@ -130,39 +110,67 @@ localStorage.setItem('generationId', pendingId);
         throw new Error('解析JSON失败: ' + text);
       }
       
-      // 紧急方案：如果API连接失败，返回一个模拟进度
-      // 这将允许UI继续工作，同时显示进度
-      if (!data && id.startsWith('pending-')) {
-        const mockProgress = Math.random() * 0.7; // 0-70%的随机进度
-        return {
-          id,
-          status: 'PROCESSING', // 使用有效的枚举值
-          progress: mockProgress,
-          message: '正在模拟进度 (API连接问题)'
-        } as GenerateResponse;
+      if (!data) {
+        throw new Error('响应数据为空');
       }
       
+      // 更新状态
+      setStatusDetails(data);
       return data as GenerateResponse;
+      
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
-      debugLog('获取状态失败:', errorMsg);
+      debugLog('GET 请求失败:', errorMsg);
       
-      // 紧急方案：如果API返回错误，返回一个模拟进度
-      if (id.startsWith('pending-')) {
-        const mockProgress = Math.random() * 0.5; // 0-50%的随机进度
-        return {
-          id,
-          status: 'PROCESSING', // 使用有效的枚举值
-          progress: mockProgress,
-          message: `API连接问题 (${errorMsg})`
-        } as GenerateResponse;
+      // 退回使用 POST 请求
+      debugLog('尝试使用 POST 请求发送 ID');
+      
+      try {
+        // 使用 POST 请求 + 请求体方式尝试
+        const postRes = await fetch(NETLIFY_GET_GENERATION_PATH, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache'
+          },
+          body: JSON.stringify({
+            id: id,
+            generationId: id,
+            timestamp: Date.now()
+          })
+        });
+        
+        const postText = await postRes.text();
+        debugLog('POST 请求响应:', postText.substr(0, 200));
+        
+        if (!postRes.ok) {
+          throw new Error(`POST 请求失败: ${postRes.status} - ${postText}`);
+        }
+        
+        const postData = JSON.parse(postText);
+        setStatusDetails(postData);
+        return postData as GenerateResponse;
+        
+      } catch (postError) {
+        debugLog('POST 请求也失败:', postError);
+        
+        // 紧急模拟策略 - 如果所有请求都失败，返回模拟进度
+        if (id.startsWith('pending-')) {
+          const mockProgress = Math.random() * 0.5;
+          return {
+            id,
+            status: 'PROCESSING',
+            progress: mockProgress,
+            message: '请求失败，显示模拟进度'
+          } as GenerateResponse;
+        }
+        
+        throw e; // 抛出原始错误
       }
-      
-      throw e;
     }
   }, []);
 
-  // 3. 轮询逻辑 - 强化版
+  // 3. 轮询逻辑
   useEffect(() => {
     if (!generationId) {
       debugLog('未找到生成ID，不启动轮询');
@@ -172,7 +180,7 @@ localStorage.setItem('generationId', pendingId);
     debugLog('开始轮询，生成ID =', generationId);
     let timer: number;
     let retryCount = 0;
-    const MAX_RETRIES = 10; // 最大重试次数
+    const MAX_RETRIES = 10;
     
     const loop = async () => {
       try {
