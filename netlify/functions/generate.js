@@ -38,14 +38,17 @@ const fetchRetry = async (url, opts) => {
 export async function handler(event, context) {
   // CORS 预检
   if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: corsHeaders };
+    return new Response(null, { 
+      status: 204, 
+      headers: corsHeaders 
+    });
   }
+  
   if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers: corsHeaders,
-      body: 'Method Not Allowed'
-    };
+    return new Response('Method Not Allowed', { 
+      status: 405, 
+      headers: corsHeaders 
+    });
   }
 
   // 解析请求体
@@ -53,35 +56,50 @@ export async function handler(event, context) {
   try {
     body = JSON.parse(event.body || '{}');
   } catch {
-    return {
-      statusCode: 400,
-      headers: corsHeaders,
-      body: JSON.stringify({ message: 'Invalid JSON body' })
-    };
+    return new Response(
+      JSON.stringify({ message: 'Invalid JSON body' }), 
+      { 
+        status: 400, 
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        } 
+      }
+    );
   }
 
   // 验证必需参数
   const { prompt, instrumental, customMode, callBackUrl, style, model, title, tags, instrument, tempo, test } = body;
   if (!prompt && !test) {
-    return {
-      statusCode: 400,
-      headers: corsHeaders,
-      body: JSON.stringify({ message: '缺少必要参数 prompt 或 test' })
-    };
+    return new Response(
+      JSON.stringify({ message: '缺少必要参数 prompt 或 test' }), 
+      { 
+        status: 400, 
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        } 
+      }
+    );
   }
 
   // 测试模式，返回固定 ID
   if (test === true) {
-    return {
-      statusCode: 200,
-      headers: corsHeaders,
-      body: JSON.stringify({
+    return new Response(
+      JSON.stringify({
         id: 'test-request',
         status: 'IN_PROGRESS',
         progress: 0,
         message: '测试请求已接收'
-      })
-    };
+      }), 
+      { 
+        status: 200, 
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        } 
+      }
+    );
   }
 
   // 构建 Suno 请求体
@@ -116,11 +134,16 @@ export async function handler(event, context) {
     );
   } catch (err) {
     console.error('[generate] 请求失败:', err.message);
-    return {
-      statusCode: 502,
-      headers: corsHeaders,
-      body: JSON.stringify({ message: '请求 Suno API 失败', error: err.message })
-    };
+    return new Response(
+      JSON.stringify({ message: '请求 Suno API 失败', error: err.message }), 
+      { 
+        status: 502, 
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        } 
+      }
+    );
   }
 
   const text = await resp.text();
@@ -131,21 +154,31 @@ export async function handler(event, context) {
     data = JSON.parse(text);
   } catch (err) {
     console.error('[generate] 响应非 JSON:', err.message);
-    return {
-      statusCode: 502,
-      headers: corsHeaders,
-      body: JSON.stringify({ message: 'Suno 返回非 JSON', error: err.message })
-    };
+    return new Response(
+      JSON.stringify({ message: 'Suno 返回非 JSON', error: err.message }), 
+      { 
+        status: 502, 
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        } 
+      }
+    );
   }
 
   // 处理 Suno 自身错误
   if (data.code && data.code !== 200) {
     console.error('[generate] API 错误:', data.msg);
-    return {
-      statusCode: resp.status,
-      headers: corsHeaders,
-      body: JSON.stringify({ message: `API 错误(${data.code}): ${data.msg}`, error: data })
-    };
+    return new Response(
+      JSON.stringify({ message: `API 错误(${data.code}): ${data.msg}`, error: data }), 
+      { 
+        status: resp.status, 
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json'
+        } 
+      }
+    );
   }
 
   // 尝试提取 ID
@@ -172,11 +205,16 @@ export async function handler(event, context) {
   }
 
   // 最终返回给前端
-  return {
-    statusCode: 200,
-    headers: corsHeaders,
-    body: JSON.stringify(data)
-  };
+  return new Response(
+    JSON.stringify(data), 
+    { 
+      status: 200, 
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'application/json'
+      } 
+    }
+  );
 }
 
 export default handler;
