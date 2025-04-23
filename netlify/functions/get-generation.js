@@ -97,18 +97,42 @@ export async function handler(event) {
   // 如果请求体中没有ID，尝试从路径中提取
   if (!id && path) {
     console.log('[get-generation] 从路径提取ID, path =', path);
-    // 从路径中提取ID（形如 /.netlify/functions/get-generation/123456）
+    // 改进路径解析逻辑，避免误识别函数名为ID
     const pathParts = path.split('/');
-    if (pathParts.length > 0) {
-      id = pathParts[pathParts.length - 1];
+    // 检查路径格式是否符合预期的"/.netlify/functions/get-generation/ID"模式
+    if (pathParts.length > 4 && pathParts[3] === 'get-generation') {
+      id = pathParts[4]; // 第5个元素应该是ID
       console.log('[get-generation] 从路径提取到ID:', id);
+    } else {
+      // 如果路径不符合预期格式，记录详细信息
+      console.log('[get-generation] 路径格式不符合预期，无法提取ID');
+      console.log('[get-generation] 路径部分:', pathParts);
+    }
+  }
+
+  // 检查 POST 请求体 - 特殊处理 GET 请求已改为 POST 的情况
+  if (!id && httpMethod === 'POST' && bodyData) {
+    console.log('[get-generation] 尝试从POST请求中提取ID细节');
+    
+    // 直接打印完整的请求体结构，帮助调试
+    console.log('[get-generation] 完整请求体结构:', JSON.stringify(bodyData));
+    
+    // 尝试获取任何可能的ID字段
+    const possibleId = bodyData.id || bodyData.ID || bodyData.Id || bodyData.generationId;
+    if (possibleId) {
+      id = possibleId;
+      console.log('[get-generation] 从请求体中找到可能的ID字段:', id);
     }
   }
   
   if (!id) {
-    console.log('[get-generation] 未找到ID参数');
+    console.log('[get-generation] 未找到ID参数，返回400错误');
     return new Response(
-      JSON.stringify({ code: 400, msg: '缺少 id 参数' }), 
+      JSON.stringify({ 
+        code: 400, 
+        msg: '缺少 id 参数',
+        detail: '请确保通过查询参数、请求体或URL路径提供ID' 
+      }), 
       {
         status: 400,
         headers: {
