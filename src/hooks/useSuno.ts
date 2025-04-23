@@ -46,9 +46,16 @@ export const useSuno = () => {
     if (!res.ok) { setError(data.message || `Generate API 错误 (${res.status})`); setLoading(false); throw new Error(data.message); }
     if (!data.id) { setError('Generate 接口未返回 id'); setLoading(false); throw new Error('缺少 id'); }
 
-    debugLog('pendingId =', data.id);
-    setGenerationId(data.id);
-    localStorage.setItem('generationId', data.id);
+    // 处理前缀：确保以 pending- 开头
+let pendingId = data.id;
+if (!pendingId.startsWith('pending-')) {
+  pendingId = `pending-${pendingId}`;
+  debugLog('自动添加 pending- 前缀, new pendingId =', pendingId);
+} else {
+  debugLog('pendingId 已包含前缀');
+}
+setGenerationId(pendingId);
+localStorage.setItem('generationId', pendingId);
 
     if (data.status === 'COMPLETE' && data.audio_url) {
       setAudioUrl(data.audio_url);
