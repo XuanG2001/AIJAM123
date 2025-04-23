@@ -129,6 +129,12 @@ export const useSuno = () => {
         debugLog('设置instrumental默认值为false');
       }
       
+      // 确保customMode参数存在
+      if (params.customMode === undefined || params.customMode === null) {
+        params.customMode = false; // 设置默认值
+        debugLog('设置customMode默认值为false');
+      }
+      
       // 检查Netlify函数是否可访问
       if (typeof window !== 'undefined') {
         debugLog('生成API地址:', '/.netlify/functions/generate');
