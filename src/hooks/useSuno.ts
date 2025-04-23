@@ -4,6 +4,8 @@ import { GenerateParams, GenerateResponse } from '../types';
 // Netlify 函数端点
 const NETLIFY_GENERATE_PATH       = '/.netlify/functions/generate';
 const NETLIFY_GET_GENERATION_PATH = '/.netlify/functions/get-generation';
+// 添加测试端点
+const NETLIFY_TEST_PATH           = '/.netlify/functions/test';
 
 const DEBUG = true;
 const debugLog = (...args: any[]) => { if (DEBUG) console.log('[Suno]', ...args); };
@@ -72,11 +74,27 @@ localStorage.setItem('generationId', pendingId);
     if (!id) throw new Error('缺少 generationId');
     debugLog('checkGenerationStatus, id=', id);
 
-    // 确保使用正确的端点
-    const url = `${NETLIFY_GET_GENERATION_PATH}?id=${encodeURIComponent(id)}`;
-    debugLog('Polling URL:', url);
+    // 先尝试直接访问测试接口，看是否能正常工作
+    try {
+      const testUrl = `${NETLIFY_TEST_PATH}?id=${encodeURIComponent(id)}`;
+      debugLog('测试测试接口:', testUrl);
+      const testRes = await fetch(testUrl, { method: 'GET' });
+      const testText = await testRes.text();
+      debugLog('测试接口响应:', testText.substr(0, 200));
+    } catch (e) {
+      debugLog('测试接口错误:', e);
+    }
 
-    const res = await fetch(url, { method: 'GET' });
+    // 尝试使用 POST 请求替代 GET 请求
+    debugLog('使用POST方法尝试请求状态');
+    const url = `${NETLIFY_GET_GENERATION_PATH}`;
+    const res = await fetch(url, {
+      method: 'POST',  // 使用 POST 替代 GET
+      headers: { 
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ id }) // 将 ID 放入请求体
+    });
     const text = await res.text();
     debugLog('原始响应文本:', text.substr(0, 200));
 
