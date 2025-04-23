@@ -141,75 +141,113 @@ export const useSuno = () => {
       }
       
       // 调用Netlify函数生成音乐
-      const response = await fetch('/.netlify/functions/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(params),
-      });
+      debugLog('开始请求...');
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 120000); // 120秒客户端超时 (比服务端更长)
       
-      // 获取原始响应文本
-      const responseText = await response.text();
-      debugLog('原始响应:', responseText);
-      
-      // 尝试解析JSON响应
-      let data;
       try {
-        data = JSON.parse(responseText);
-      } catch (e) {
-        throw new Error(`解析API响应失败: ${responseText.substring(0, 100)}...`);
-      }
-      
-      // 保存响应详情，用于调试
-      setStatusDetails(data);
-      
-      // 检查API响应状态
-      if (!response.ok) {
-        const statusCode = response.status;
-        debugLog('API响应错误:', statusCode, data);
+        const response = await fetch('/.netlify/functions/generate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(params),
+          signal: controller.signal
+        });
         
-        // 显示具体的API错误信息
-        let errorMsg = data.message || `API请求失败(${statusCode})`;
+        clearTimeout(timeoutId);
         
-        // 处理apibox.erweima.ai的特定错误格式
-        if (data.error && data.error.code !== undefined && data.error.msg) {
-          errorMsg = `API错误(${data.error.code}): ${data.error.msg}`;
-        } else if (data.response && data.response.code !== undefined && data.response.msg) {
-          errorMsg = `API错误(${data.response.code}): ${data.response.msg}`;
+        // 获取原始响应文本
+        let responseText: string;
+        try {
+          responseText = await response.text();
+          debugLog('原始响应长度:', responseText.length);
+          debugLog('响应状态:', response.status);
+        } catch (error: any) {
+          debugLog('读取响应文本失败:', error);
+          throw new Error(`读取响应失败: ${error.message}`);
         }
         
-        setError(errorMsg);
-        throw new Error(errorMsg);
-      }
-      
-      debugLog('生成初始响应:', data);
-      
-      // 检查ID字段
-      if (!data.id) {
-        const errorMsg = '返回数据缺少ID字段，无法继续处理';
-        debugLog('错误:', errorMsg, data);
-        setError(errorMsg);
-        throw new Error(errorMsg);
-      }
-      
-      setGenerationId(data.id);
-      localStorage.setItem('generationId', data.id);
-      
-      // 如果有音频URL，直接使用
-      if (data.status === 'COMPLETE' && data.audio_url) {
-        debugLog('音频已就绪:', data.audio_url);
-        setAudioUrl(data.audio_url);
-        localStorage.setItem('audioUrl', data.audio_url);
-        setProgress(100);
-      } else {
-        // 正常轮询状态
-        debugLog('开始轮询生成状态, ID:', data.id);
-        await pollGenerationStatus(data.id);
-      }
+        if (responseText.startsWith('<')) {
+          // 响应是HTML，可能是超时错误
+          debugLog('收到HTML响应而非JSON:', responseText.substring(0, 100));
+          throw new Error('API请求超时或返回非法格式');
+        }
+        
+        // 尝试解析JSON响应
+        let data;
+        try {
+          data = JSON.parse(responseText);
+        } catch (e) {
+          debugLog('解析响应失败, 原始内容:', responseText.substring(0, 200));
+          throw new Error(`解析API响应失败: ${responseText.substring(0, 100)}...`);
+        }
+        
+        // 保存响应详情，用于调试
+        setStatusDetails(data);
+        
+        // 检查API响应状态
+        if (!response.ok) {
+          const statusCode = response.status;
+          debugLog('API响应错误:', statusCode, data);
+          
+          // 显示具体的API错误信息
+          let errorMsg = data.message || `API请求失败(${statusCode})`;
+          
+          // 处理apibox.erweima.ai的特定错误格式
+          if (data.error) {
+            if (data.error.code !== undefined && data.error.msg) {
+              errorMsg = `API错误(${data.error.code}): ${data.error.msg}`;
+            } else if (typeof data.error === 'string') {
+              errorMsg = `API错误: ${data.error}`;
+            }
+          } else if (data.response && data.response.code !== undefined && data.response.msg) {
+            errorMsg = `API错误(${data.response.code}): ${data.response.msg}`;
+          }
+          
+          // 对于网关超时错误 (504)，提供更友好的错误消息
+          if (statusCode === 504 || errorMsg.includes('timeout') || errorMsg.includes('timed out')) {
+            errorMsg = '请求超时，请稍后再试。可能的原因：网络连接不稳定或服务器响应时间过长';
+          }
+          
+          setError(errorMsg);
+          throw new Error(errorMsg);
+        }
+        
+        debugLog('生成初始响应:', data);
+        
+        // 检查ID字段
+        if (!data.id) {
+          const errorMsg = '返回数据缺少ID字段，无法继续处理';
+          debugLog('错误:', errorMsg, data);
+          setError(errorMsg);
+          throw new Error(errorMsg);
+        }
+        
+        setGenerationId(data.id);
+        localStorage.setItem('generationId', data.id);
+        
+        // 如果有音频URL，直接使用
+        if (data.status === 'COMPLETE' && data.audio_url) {
+          debugLog('音频已就绪:', data.audio_url);
+          setAudioUrl(data.audio_url);
+          localStorage.setItem('audioUrl', data.audio_url);
+          setProgress(100);
+        } else {
+          // 正常轮询状态
+          debugLog('开始轮询生成状态, ID:', data.id);
+          await pollGenerationStatus(data.id);
+        }
 
-      return data;
-    } catch (err) {
+        return data;
+      } catch (error: any) {
+        clearTimeout(timeoutId);
+        if (error.name === 'AbortError') {
+          throw new Error('前端请求超时，请稍后重试。可能的原因：网络连接不稳定或服务器暂时不可用');
+        }
+        throw error;
+      }
+    } catch (err: any) {
       const errorMsg = err instanceof Error ? err.message : '未知错误';
       console.error('生成失败:', errorMsg);
       
