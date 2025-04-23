@@ -43,26 +43,13 @@ export const useSuno = () => {
     const data = await res.json();
     debugLog('generate 响应:', data);
 
-    if (!res.ok) {
-      const msg = data.message || `Generate API 错误 (${res.status})`;
-      setError(msg);
-      setLoading(false);
-      throw new Error(msg);
-    }
+    if (!res.ok) { setError(data.message || `Generate API 错误 (${res.status})`); setLoading(false); throw new Error(data.message); }
+    if (!data.id) { setError('Generate 接口未返回 id'); setLoading(false); throw new Error('缺少 id'); }
 
-    if (!data.id) {
-      const msg = 'Generate 接口未返回 id';
-      setError(msg);
-      setLoading(false);
-      throw new Error(msg);
-    }
-
-    // 保存并设置 ID
     debugLog('pendingId =', data.id);
     setGenerationId(data.id);
     localStorage.setItem('generationId', data.id);
 
-    // 如果立即返回音频
     if (data.status === 'COMPLETE' && data.audio_url) {
       setAudioUrl(data.audio_url);
       localStorage.setItem('audioUrl', data.audio_url);
@@ -78,18 +65,32 @@ export const useSuno = () => {
     if (!id) throw new Error('缺少 generationId');
     debugLog('checkGenerationStatus, id=', id);
 
+    // 确保使用正确的端点
     const url = `${NETLIFY_GET_GENERATION_PATH}?id=${encodeURIComponent(id)}`;
     debugLog('Polling URL:', url);
 
     const res = await fetch(url);
-    const json = await res.json();
+    const text = await res.text();
+    debugLog('原始响应文本:', text.substr(0, 200));
+
+    // 405 或其他非 JSON 响应需先处理
+    if (!res.ok) {
+      // 服务器返回 Method Not Allowed 或自定义错误
+      const msg = text.startsWith('{')
+        ? JSON.parse(text).message || `状态查询错误(${res.status})`
+        : `请求失败: ${text}`;
+      throw new Error(msg);
+    }
+
+    let json: any;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error('状态查询返回非法JSON');
+    }
     debugLog('状态响应:', json);
     setStatusDetails(json);
 
-    if (!res.ok) {
-      const msg = json.message || `状态查询错误 (${res.status})`;
-      throw new Error(msg);
-    }
     return json as GenerateResponse;
   }, []);
 
@@ -101,9 +102,7 @@ export const useSuno = () => {
     const loop = async () => {
       try {
         const result = await checkGenerationStatus(generationId);
-        if (result.progress !== undefined) {
-          setProgress(result.progress * 100);
-        }
+        if (result.progress !== undefined) setProgress(result.progress * 100);
         if (result.status === 'COMPLETE' && result.audio_url) {
           debugLog('生成完成:', result.audio_url);
           setAudioUrl(result.audio_url);
