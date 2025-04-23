@@ -309,16 +309,42 @@ exports.handler = async function(event, context) {
     }
 
     // 处理嵌套响应结构 - 先检查是否是标准成功响应格式
-    if (data.code === 200 && data.data) {
+    if (data.code === 200) {
       console.log('API返回成功响应，检查嵌套数据结构');
-      // 尝试从嵌套结构中获取ID
-      if (data.data.id) {
-        console.log('从嵌套结构中提取ID:', data.data.id);
-        data.id = data.data.id;
-      } else if (data.data.task_id) {
-        console.log('从嵌套结构中提取task_id作为ID:', data.data.task_id);
-        data.id = data.data.task_id;
+      
+      // 创建调试信息对象
+      const debugInfo = {
+        original_structure: JSON.stringify(data)
+      };
+      
+      // 检查各种可能的ID位置
+      if (data.data) {
+        if (data.data.task_id) {
+          // 方式1: 顶层任务ID
+          console.log('从data.data.task_id提取ID:', data.data.task_id);
+          data.id = data.data.task_id;
+          debugInfo.id_source = 'data.data.task_id';
+        } else if (data.data.data && Array.isArray(data.data.data) && data.data.data.length > 0 && data.data.data[0].id) {
+          // 方式2: 嵌套数组中的第一个项目ID
+          console.log('从data.data.data[0].id提取ID:', data.data.data[0].id);
+          data.id = data.data.data[0].id;
+          debugInfo.id_source = 'data.data.data[0].id';
+          
+          // 如果有音频URL，也提取出来
+          if (data.data.data[0].audio_url) {
+            data.audio_url = data.data.data[0].audio_url;
+            debugInfo.audio_url_source = 'data.data.data[0].audio_url';
+          }
+        } else if (typeof data.data === 'string') {
+          // 方式3: data字段可能直接是ID字符串
+          console.log('data.data是字符串，可能是ID:', data.data);
+          data.id = data.data;
+          debugInfo.id_source = 'data.data (as string)';
+        }
       }
+      
+      // 添加调试信息
+      data._debug_info = debugInfo;
     }
 
     // 检查响应是否包含ID
@@ -344,7 +370,8 @@ exports.handler = async function(event, context) {
             id: data.id,
             _debug_info: {
               original_response: data,
-              message: '使用临时ID继续处理'
+              message: '使用临时ID继续处理',
+              note: '请检查回调URL，ID应该通过回调获取'
             }
           })
         };
