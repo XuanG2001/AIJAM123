@@ -103,6 +103,27 @@ exports.handler = async function(event, context) {
       };
     }
 
+    console.log('查询ID:', id);
+    
+    // 处理pending-前缀的临时ID（表示API请求已接受但通过回调返回结果）
+    if (id.startsWith('pending-')) {
+      console.log('检测到pending临时ID，返回等待状态');
+      return {
+        statusCode: 200,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: id,
+          status: 'PENDING',
+          progress: 0.2,
+          message: '任务正在处理中，请等待回调',
+          api_note: '根据API文档，音乐生成是异步过程，结果将通过回调返回'
+        })
+      };
+    }
+
     console.log(`查询生成状态, ID: ${id}`);
 
     // 如果ID是测试ID，返回测试响应
