@@ -1,12 +1,8 @@
 // SUNO API回调处理函数
-// 处理从SUNO API发送回来的音乐生成结果
-const crypto = require('crypto');
-import { blobs } from '@netlify/blobs';
+// 只提供基本的响应，不再存储回调数据
+// 我们现在直接查询SUNO API获取任务状态
 
-// 定义TTL为24小时 (毫秒)
-const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-
-console.log('初始化SUNO回调处理函数');
+console.log('初始化简化版SUNO回调处理函数');
 
 exports.handler = async function(event, context) {
   try {
@@ -26,96 +22,22 @@ exports.handler = async function(event, context) {
       };
     }
     
-    // 处理GET请求 - 检索回调数据
-    if (event.httpMethod === 'GET') {
-      const resultId = event.queryStringParameters?.result_id;
-      console.log('GET请求检索回调结果，ID:', resultId);
-      
-      if (!resultId) {
-        console.log('缺少必要的result_id参数');
-        return {
-          statusCode: 400,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            success: false,
-            error: '请提供result_id参数'
-          })
-        };
-      }
-      
-      try {
-        // 从Blobs存储获取回调数据
-        const blobData = await blobs.get(resultId);
-        
-        if (blobData) {
-          console.log('找到回调数据，ID:', resultId);
-          return {
-            statusCode: 200,
-            headers: {
-              'Access-Control-Allow-Origin': '*',
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              success: true,
-              has_data: true,
-              callback_data: JSON.parse(blobData),
-              result_id: resultId
-            })
-          };
-        } else {
-          console.log('未找到回调数据，ID:', resultId);
-          return {
-            statusCode: 200,
-            headers: {
-              'Access-Control-Allow-Origin': '*',
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              success: true,
-              has_data: false,
-              message: '未找到回调数据'
-            })
-          };
-        }
-      } catch (error) {
-        console.log('获取回调数据出错:', error.message);
-        return {
-          statusCode: 500,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            success: false,
-            error: '检索回调数据时出错'
-          })
-        };
-      }
-    }
-    
-    // 处理POST请求 - 接收回调数据
+    // 处理POST请求 - 仅返回成功响应，不再存储数据
     if (event.httpMethod === 'POST') {
-      console.log('处理POST回调请求');
+      console.log('处理POST回调请求 (简化版)');
       
       try {
-        const payload = JSON.parse(event.body);
-        console.log('已解析回调数据，包含字段:', Object.keys(payload).join(', '));
+        // 解析请求体，仅用于日志记录
+        let payload;
+        try {
+          payload = JSON.parse(event.body);
+          console.log('收到回调数据，类型:', payload.callbackType || '未知', 
+                      '任务ID:', payload.task_id || payload.id || '未知');
+        } catch (parseError) {
+          console.log('回调数据非JSON格式');
+        }
         
-        // 生成唯一ID作为存储键
-        const resultId = payload.id || ('callback-' + crypto.randomBytes(8).toString('hex'));
-        
-        // 使用Netlify Blobs存储回调数据
-        await blobs.set(
-          resultId, 
-          JSON.stringify(payload),
-          { ttl: ONE_DAY_MS } // 设置24小时后过期
-        );
-        
-        console.log('成功存储回调数据到Blobs，ID:', resultId);
-        
+        // 直接返回成功响应
         return {
           statusCode: 200,
           headers: {
@@ -124,12 +46,11 @@ exports.handler = async function(event, context) {
           },
           body: JSON.stringify({
             success: true,
-            message: '回调数据已保存',
-            result_id: resultId
+            message: '回调已接收 (使用API查询模式，不保存回调数据)'
           })
         };
       } catch (error) {
-        console.log('处理回调数据时出错:', error.message);
+        console.log('处理回调请求时出错:', error.message);
         return {
           statusCode: 500,
           headers: {
@@ -142,6 +63,21 @@ exports.handler = async function(event, context) {
           })
         };
       }
+    }
+    
+    // GET请求 - 返回说明信息
+    if (event.httpMethod === 'GET') {
+      return {
+        statusCode: 200,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          message: '此端点仅用于接收Suno API回调，不存储数据。使用get-generation接口查询任务状态。',
+          mode: 'direct_api_query'
+        })
+      };
     }
     
     // 处理其他HTTP方法
