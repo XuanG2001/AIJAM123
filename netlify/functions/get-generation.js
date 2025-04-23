@@ -3,10 +3,10 @@
 
 // 使用正确的API基础URL
 const SUNO_API_BASE_URL = 'https://apibox.erweima.ai/api/v1/generate/';
+const SUNO_RECORD_INFO_URL = 'https://apibox.erweima.ai/api/v1/generate/record-info';
 // API密钥 
 const SUNO_API_KEY = process.env.SUNO_API_KEY || '54eb13895a8bd99af384da696d9f6419';
-// 引入Netlify Blobs用于查询回调结果
-import { blobs } from '@netlify/blobs';
+// 移除Netlify Blobs导入和内存存储相关代码
 
 // 请求超时设置 (30秒)
 const REQUEST_TIMEOUT = 30000;
@@ -107,67 +107,7 @@ exports.handler = async function(event, context) {
 
     console.log('查询ID:', id);
     
-    // 处理pending-前缀的临时ID（表示API请求已接受但通过回调返回结果）
-    if (id.startsWith('pending-')) {
-      console.log('检测到pending临时ID，检查是否有关联的回调数据');
-      
-      // 尝试从Netlify Blobs中获取回调数据
-      try {
-        // 从ID中提取任务ID部分
-        const taskId = id.replace('pending-', '');
-        console.log('查询回调数据, 任务ID:', taskId);
-        
-        // 从Netlify Blobs读取数据
-        const blobData = await blobs.get(taskId);
-        
-        if (blobData) {
-          console.log('找到回调数据:', taskId);
-          const callbackData = JSON.parse(blobData.data);
-          
-          return {
-            statusCode: 200,
-            headers: {
-              'Access-Control-Allow-Origin': '*',
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-              id: id,
-              status: callbackData.status || 'COMPLETE',
-              progress: callbackData.progress || 1.0,
-              message: '任务已完成，回调数据已接收',
-              callback_data: callbackData.audio_data,
-              _source: 'blob_storage'
-            })
-          };
-        }
-        
-        console.log('未在Blobs存储中找到回调数据:', taskId);
-      } catch (blobError) {
-        console.log('读取Blobs存储数据时出错:', blobError.message);
-      }
-      
-      // 如果没有找到回调数据，返回等待状态
-      console.log('未找到回调数据，返回等待状态');
-      return {
-        statusCode: 200,
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          id: id,
-          status: 'PENDING',
-          progress: 0.2,
-          message: '任务正在处理中，请等待回调',
-          api_note: '根据API文档，音乐生成是异步过程，结果将通过回调返回',
-          _source: 'pending'
-        })
-      };
-    }
-
-    console.log(`查询生成状态, ID: ${id}`);
-
-    // 如果ID是测试ID，返回测试响应
+    // 处理测试ID
     if (id === 'test-request') {
       console.log('测试请求响应');
       return {
@@ -178,16 +118,19 @@ exports.handler = async function(event, context) {
         },
         body: JSON.stringify({
           id: id,
-          status: 'COMPLETE',
+          status: 'SUCCESS',
           progress: 1.0,
           message: '测试请求完成'
         })
       };
     }
-
-    // 构建API请求URL
-    const apiUrl = `${SUNO_API_BASE_URL}${id}`;
-    console.log(`请求API状态: ${apiUrl}`);
+    
+    // 移除pending-前缀（如果有）获取真实任务ID
+    const taskId = id.startsWith('pending-') ? id.replace('pending-', '') : id;
+    
+    // 构建API请求URL - 使用record-info接口
+    const apiUrl = `${SUNO_RECORD_INFO_URL}?id=${taskId}`;
+    console.log(`请求任务状态: ${apiUrl}`);
     
     // 尝试从API获取状态
     try {
@@ -316,9 +259,9 @@ exports.handler = async function(event, context) {
 
       console.log('API响应:', JSON.stringify(data, null, 2));
       
-      // 检查响应数据
-      if (!data || !data.id) {
-        console.error('API响应缺少必要字段:', data);
+      // 检查响应数据格式
+      if (!data || typeof data !== 'object') {
+        console.error('API响应格式不正确:', data);
         return {
           statusCode: 200,  // 返回200而不是500，避免前端轮询中断
           headers: {
@@ -326,23 +269,45 @@ exports.handler = async function(event, context) {
             'Content-Type': 'application/json'
           },
           body: JSON.stringify({
-            message: 'API响应缺少必要字段',
-            id: id,  // 使用请求中的ID
-            status: 'PROCESSING',  // 假设处理中
-            progress: 0.5,  // 假设进度
-            response: data
+            message: 'API响应格式不正确',
+            id: id,
+            status: 'PROCESSING',
+            progress: 0.5,
+            error: {
+              code: 'INVALID_RESPONSE',
+              msg: '响应格式不正确'
+            }
           })
         };
       }
 
-      // 返回API响应
+      // 根据Suno API文档处理响应
+      // 转换Suno API状态到我们的状态格式
+      const status = data.code === 200 ? 'SUCCESS' : 'PROCESSING';
+      const progress = status === 'SUCCESS' ? 1.0 : 0.5;
+      
+      // 构建响应数据
+      const responseData = {
+        id: id,
+        status: status,
+        progress: progress,
+        message: data.msg || '任务处理中',
+        _source: 'suno_api'
+      };
+      
+      // 如果任务成功完成，添加结果数据
+      if (status === 'SUCCESS' && data.data) {
+        responseData.result = data.data;
+      }
+
+      // 返回标准化的响应
       return {
         statusCode: 200,
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(data)
+        body: JSON.stringify(responseData)
       };
     } catch (error) {
       console.error('获取生成状态时出错:', error);
