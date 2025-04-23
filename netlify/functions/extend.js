@@ -2,9 +2,10 @@
 // const fetch = require('node-fetch');
 
 const SUNO_API_URL = 'https://apibox.erweima.ai/api/v1/generate/extend';
+// 在Netlify Functions环境中，process对象仍然可用，但需要确保它是作为ES模块使用
 const SUNO_API_KEY = process.env.VITE_SUNO_API_KEY;
 
-exports.handler = async function(event, context) {
+export async function handler(event, context) {
   console.log('延长音乐函数触发');
   
   // 处理 OPTIONS 请求
@@ -113,4 +114,6 @@ exports.handler = async function(event, context) {
       body: JSON.stringify({ message: '内部服务器错误: ' + error.message })
     };
   }
-}; 
+}
+
+export default handler; 
