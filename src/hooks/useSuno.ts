@@ -137,7 +137,7 @@ export const useSuno = () => {
       
       // 确保callBackUrl参数存在（API必需参数）
       if (!params.callBackUrl) {
-        params.callBackUrl = 'https://aijam123.netlify.app/callback'; // 设置默认回调URL
+        params.callBackUrl = 'https://aijam123.netlify.app/.netlify/functions/suno-callback'; // 设置默认回调URL
         debugLog('设置callBackUrl默认值');
       }
       
