@@ -1,6 +1,6 @@
 // 调试辅助函数
-exports.handler = async function(event, context) {
-  // 处理 OPTIONS 请求
+export async function handler(event) {
+  // 处理预检请求
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
@@ -12,69 +12,64 @@ exports.handler = async function(event, context) {
       body: ''
     };
   }
-  
-  try {
-    // 获取环境变量信息 - 仅显示是否设置，不泄露实际值
-    const envInfo = {
-      VITE_SUNO_API_KEY: process.env.VITE_SUNO_API_KEY ? '已设置' : '未设置',
-      VITE_SUNO_CALLBACK: process.env.VITE_SUNO_CALLBACK,
-      NODE_VERSION: process.version,
-      NETLIFY_ENV_VARS: Object.keys(process.env).filter(key => key.startsWith('NETLIFY_')),
-      IS_LOCAL: Boolean(process.env.NETLIFY_LOCAL),
-      DEPLOY_PRIME_URL: process.env.DEPLOY_PRIME_URL || '未设置'
-    };
-    
-    // 输出请求信息
-    const requestInfo = {
-      method: event.httpMethod,
-      path: event.path,
-      headers: event.headers,
-      functionDir: __dirname,
-      runtimeEnv: process.env.NODE_ENV
-    };
-    
-    console.log('调试信息：', { envInfo, requestInfo });
-    
-    // 测试与Suno API的连接 - 不发送实际请求，只验证能否建立连接
-    let connStatus = '未测试';
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
-      
-      const testResponse = await fetch('https://apibox.erweima.ai/api', {
-        method: 'HEAD',
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      connStatus = testResponse.ok ? '连接成功' : `连接失败: ${testResponse.status}`;
-    } catch (e) {
-      connStatus = `连接错误: ${e.message}`;
+
+  const envVars = {};
+  for (const key in process.env) {
+    if (key.startsWith('VITE_') || key.startsWith('NETLIFY_')) {
+      envVars[key] = key.includes('KEY') ? '***' : (process.env[key] || '未设置');
     }
-    
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        message: '调试信息',
-        timestamp: new Date().toISOString(),
-        environment: envInfo,
-        connection: connStatus,
-        request: requestInfo
-      })
-    };
-  } catch (error) {
-    console.error('调试函数错误:', error);
-    return {
-      statusCode: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ message: '获取调试信息时出错: ' + error.message })
-    };
   }
-}; 
+
+  // 获取 SUNO 配置信息
+  const sunoApiKey = process.env.VITE_SUNO_API_KEY;
+  const sunoApiConnectible = !!sunoApiKey;
+
+  // 记录请求信息
+  console.log('调试请求:', {
+    path: event.path,
+    method: event.httpMethod,
+    headers: event.headers,
+    queryStringParameters: event.queryStringParameters
+  });
+
+  // 模拟连接测试，不实际发送请求
+  let sunoConnectionTest = '未测试';
+  if (sunoApiConnectible) {
+    try {
+      // 仅测试能否创建请求，不实际发送
+      new Request('https://api.suno.ai/api/v1/health', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${sunoApiKey}`
+        }
+      });
+      sunoConnectionTest = '可以创建请求（未发送）';
+    } catch (error) {
+      sunoConnectionTest = `创建请求失败：${error.message}`;
+    }
+  }
+
+  return {
+    statusCode: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*', 
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      message: '调试信息',
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV || '未知',
+      netlifyEnv: process.env.NETLIFY_ENV || '未知',
+      netlifyContext: process.env.NETLIFY_CONTEXT || '未知',
+      nodePath: process.env.NODE_PATH || '未设置',
+      nodeVersion: process.version,
+      envVars,
+      sunoApi: {
+        keyConfigured: sunoApiConnectible,
+        connectionTest: sunoConnectionTest
+      }
+    })
+  };
+}
+
+export default handler; 
