@@ -44,7 +44,7 @@ const fetchRetry = async (url, opt) => {
   }
 };
 
-export const handler = async (event) => {
+exports.handler = async function(event) {
   const { httpMethod, queryStringParameters } = event;
 
   // CORS 预检
@@ -98,7 +98,7 @@ const cbCors = {
   'Access-Control-Allow-Methods': 'POST,OPTIONS'
 };
 
-export const handler = async (event) => {
+exports.handler = async function(event) {
   // CORS 预检
   if (event.httpMethod === 'OPTIONS')
     return { statusCode: 204, headers: cbCors };
@@ -124,7 +124,7 @@ const cbCors = {
   'Access-Control-Allow-Methods': 'POST,OPTIONS'
 };
 
-export const handler = async (event) => {
+exports.handler = async function(event) {
   // CORS 预检
   if (event.httpMethod === 'OPTIONS')
     return { statusCode: 204, headers: cbCors };
