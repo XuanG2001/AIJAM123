@@ -5,6 +5,8 @@
 const SUNO_API_BASE_URL = 'https://apibox.erweima.ai/api/v1/generate/';
 // API密钥 
 const SUNO_API_KEY = process.env.SUNO_API_KEY || '54eb13895a8bd99af384da696d9f6419';
+// 引入Netlify Blobs用于查询回调结果
+import { blobs } from '@netlify/blobs';
 
 // 请求超时设置 (30秒)
 const REQUEST_TIMEOUT = 30000;
@@ -109,50 +111,39 @@ exports.handler = async function(event, context) {
     if (id.startsWith('pending-')) {
       console.log('检测到pending临时ID，检查是否有关联的回调数据');
       
-      // 尝试从回调处理函数获取结果
+      // 尝试从Netlify Blobs中获取回调数据
       try {
-        // 构建回调查询URL
-        const callbackCheckUrl = `/.netlify/functions/suno-callback?result_id=${id.replace('pending-', '')}`;
-        console.log('检查回调数据:', callbackCheckUrl);
+        // 从ID中提取任务ID部分
+        const taskId = id.replace('pending-', '');
+        console.log('查询回调数据, 任务ID:', taskId);
         
-        // 请求回调数据
-        const callbackResponse = await fetch(callbackCheckUrl, {
-          method: 'GET',
-          headers: {
-            'Accept': 'application/json'
-          }
-        });
+        // 从Netlify Blobs读取数据
+        const blobData = await blobs.get(taskId);
         
-        if (callbackResponse.ok) {
-          const callbackData = await callbackResponse.json();
-          console.log('回调检查结果:', JSON.stringify(callbackData, null, 2));
+        if (blobData) {
+          console.log('找到回调数据:', taskId);
+          const callbackData = JSON.parse(blobData.data);
           
-          // 如果回调数据存在
-          if (callbackData.success && callbackData.has_data) {
-            console.log('找到回调数据，返回完成状态');
-            
-            const result = {
+          return {
+            statusCode: 200,
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
               id: id,
-              status: callbackData.callback_data.status || 'COMPLETE',
-              progress: callbackData.callback_data.progress || 1.0,
+              status: callbackData.status || 'COMPLETE',
+              progress: callbackData.progress || 1.0,
               message: '任务已完成，回调数据已接收',
-              callback_data: callbackData.callback_data.audio_data,
-              _source: 'callback'
-            };
-            
-            return {
-              statusCode: 200,
-              headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(result)
-            };
-          }
+              callback_data: callbackData.audio_data,
+              _source: 'blob_storage'
+            })
+          };
         }
-      } catch (callbackError) {
-        console.log('检查回调数据时出错:', callbackError.message);
-        // 如果出错，继续使用默认的pending响应
+        
+        console.log('未在Blobs存储中找到回调数据:', taskId);
+      } catch (blobError) {
+        console.log('读取Blobs存储数据时出错:', blobError.message);
       }
       
       // 如果没有找到回调数据，返回等待状态
