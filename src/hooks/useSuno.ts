@@ -1,10 +1,9 @@
 import { useState, useCallback, useEffect } from 'react';
 import { GenerateParams, GenerateResponse } from '../types';
 
-// Netlify 函数路径
+// Netlify 函数端点
 const NETLIFY_GENERATE_PATH       = '/.netlify/functions/generate';
 const NETLIFY_GET_GENERATION_PATH = '/.netlify/functions/get-generation';
-const NETLIFY_EXTEND_PATH         = '/.netlify/functions/extend';
 
 const DEBUG = true;
 const debugLog = (...args: any[]) => { if (DEBUG) console.log('[Suno]', ...args); };
@@ -25,7 +24,7 @@ export const useSuno = () => {
   });
   const [statusDetails, setStatusDetails] = useState<any>(null);
 
-  // 1. 发起生成请求
+  // 1. 生成音乐
   const generate = useCallback(async (params: GenerateParams) => {
     setError(null);
     setLoading(true);
@@ -33,11 +32,6 @@ export const useSuno = () => {
     setAudioUrl(null);
     setStatusDetails(null);
     localStorage.removeItem('audioUrl');
-
-    // 默认值处理
-    params.instrumental = params.instrumental ?? false;
-    params.customMode   = params.customMode ?? false;
-    params.callBackUrl  = params.callBackUrl || `${window.location.origin}${NETLIFY_EXTEND_PATH.replace('extend', 'suno-callback')}`;
 
     debugLog('generate 参数:', params);
 
@@ -68,7 +62,7 @@ export const useSuno = () => {
     setGenerationId(data.id);
     localStorage.setItem('generationId', data.id);
 
-    // 若立即返回音频
+    // 如果立即返回音频
     if (data.status === 'COMPLETE' && data.audio_url) {
       setAudioUrl(data.audio_url);
       localStorage.setItem('audioUrl', data.audio_url);
@@ -79,7 +73,7 @@ export const useSuno = () => {
     return data as GenerateResponse;
   }, []);
 
-  // 2. 单次状态查询
+  // 2. 单次查询状态
   const checkGenerationStatus = useCallback(async (id: string): Promise<GenerateResponse> => {
     if (!id) throw new Error('缺少 generationId');
     debugLog('checkGenerationStatus, id=', id);
