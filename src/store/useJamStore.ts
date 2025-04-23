@@ -100,7 +100,7 @@ const useJamStore = create<JamState>((set, get) => ({
     }
     
     // 设置默认回调URL - 这将在ControlPanel中被覆盖
-    const defaultCallbackUrl = 'https://aijam123.netlify.app/callback';
+    const defaultCallbackUrl = 'https://aijam123.netlify.app/.netlify/functions/suno-callback';
     
     return {
       customMode: state.customMode,
