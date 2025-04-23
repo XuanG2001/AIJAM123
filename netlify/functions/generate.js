@@ -308,9 +308,47 @@ exports.handler = async function(event, context) {
       };
     }
 
+    // 处理嵌套响应结构 - 先检查是否是标准成功响应格式
+    if (data.code === 200 && data.data) {
+      console.log('API返回成功响应，检查嵌套数据结构');
+      // 尝试从嵌套结构中获取ID
+      if (data.data.id) {
+        console.log('从嵌套结构中提取ID:', data.data.id);
+        data.id = data.data.id;
+      } else if (data.data.task_id) {
+        console.log('从嵌套结构中提取task_id作为ID:', data.data.task_id);
+        data.id = data.data.task_id;
+      }
+    }
+
     // 检查响应是否包含ID
     if (!data.id) {
       console.error('API响应缺少ID字段:', JSON.stringify(data));
+      
+      // 如果API返回了成功状态码但没有ID，创建一个临时ID
+      if (data.code === 200 && data.msg === 'success') {
+        console.log('API返回成功但无ID，创建临时ID');
+        data.id = `temp-${Date.now()}`;
+        console.log('创建的临时ID:', data.id);
+        
+        // 继续正常流程，使用临时ID
+        console.log('使用临时ID继续生成流程:', data.id);
+        return {
+          statusCode: 200,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            ...data,
+            id: data.id,
+            _debug_info: {
+              original_response: data,
+              message: '使用临时ID继续处理'
+            }
+          })
+        };
+      }
       
       // 尝试从响应中获取其他信息
       let errorDetail = '';
