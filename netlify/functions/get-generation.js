@@ -15,23 +15,23 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'GET,HEAD,OPTIONS'
 };
 
-/** fetch with timeout helper */
+// Fetch with timeout helper
 const fetchTimeout = (url, opt = {}, ms = TIMEOUT_MS) =>
-  new Promise((res, rej) => {
-    const ctl = new AbortController();
-    const id = setTimeout(() => ctl.abort(), ms);
-    fetch(url, { ...opt, signal: ctl.signal })
-      .then((r) => {
-        clearTimeout(id);
-        res(r);
+  new Promise((resolve, reject) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), ms);
+    fetch(url, { ...opt, signal: controller.signal })
+      .then((response) => {
+        clearTimeout(timeoutId);
+        resolve(response);
       })
-      .catch((e) => {
-        clearTimeout(id);
-        rej(e);
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        reject(error);
       });
   });
 
-/** basic exponential‑backoff retry */
+// Basic exponential‑backoff retry
 const fetchRetry = async (url, opt) => {
   for (let i = 0; i <= MAX_RETRY; i++) {
     try {
@@ -45,7 +45,7 @@ const fetchRetry = async (url, opt) => {
 };
 
 // 2. 处理函数 ----------------------------------------------------
-export const handler = async (event) => {
+export default async function handler(event) {
   const { httpMethod, queryStringParameters } = event;
 
   // CORS 预检
@@ -65,20 +65,25 @@ export const handler = async (event) => {
       body: JSON.stringify({ code: 400, msg: '缺少 id 参数' })
     };
 
-  const api = `${SUNO_RECORD_INFO_URL}?id=${encodeURIComponent(id)}`;
-  console.log('[get-generation] =>', api);
+  // 如果有pending-前缀，移除前缀获取真实任务ID
+  const taskId = id.startsWith('pending-') ? id.substring(8) : id;
+  
+  // 构建API请求URL
+  const api = `${SUNO_RECORD_INFO_URL}?id=${encodeURIComponent(taskId)}`;
+  console.log('[get-generation] 原始ID:', id, '处理后ID:', taskId);
+  console.log('[get-generation] API请求:', api);
   console.log('[get-generation] key head =', (process.env.SUNO_API_KEY || '').slice(0, 8));
 
   try {
-    const resp = await fetchRetry(api, {
+    const response = await fetchRetry(api, {
       headers: {
         Accept: 'application/json',
         Authorization: `Bearer ${process.env.SUNO_API_KEY}`
       }
     });
-    const body = await resp.text();
-    console.log('[resp]', body.slice(0, 300)); // 打印前 300 字方便排查
-    return { statusCode: resp.status, headers: corsHeaders, body };
+    const body = await response.text();
+    console.log('[response]', body.slice(0, 300)); // 打印前 300 字方便排查
+    return { statusCode: response.status, headers: corsHeaders, body };
   } catch (err) {
     console.error('[get-generation] error:', err.message);
     return {
@@ -87,7 +92,7 @@ export const handler = async (event) => {
       body: JSON.stringify({ code: 502, msg: err.message })
     };
   }
-};
+}
 
 
 // === netlify/functions/suno-callback.js ===
@@ -109,32 +114,6 @@ export const handler = async (event) => {
 
   try {
     console.log('[Suno callback] raw body:', event.body?.slice(0, 1000));
-  } catch (_) {}
-
-  return {
-    statusCode: 200,
-    headers: cbCors,
-    body: JSON.stringify({ success: true, mode: 'direct_api_query' })
-  };
-}; ===
-// 轻量回调：仅记录日志并返回 200，实际状态由前端轮询 get‑generation 获取
-
-const cbCors = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'POST,OPTIONS'
-};
-
-export const handler = async (event) => {
-  // CORS 预检
-  if (event.httpMethod === 'OPTIONS')
-    return { statusCode: 204, headers: cbCors };
-
-  if (event.httpMethod !== 'POST')
-    return { statusCode: 405, headers: cbCors, body: 'Method Not Allowed' };
-
-  try {
-    console.log('[Suno callback] raw body:', event.body?.slice(0, 1000)); // 截断日志防止爆量
   } catch (_) {}
 
   return {
