@@ -76,7 +76,7 @@ localStorage.setItem('generationId', pendingId);
     const url = `${NETLIFY_GET_GENERATION_PATH}?id=${encodeURIComponent(id)}`;
     debugLog('Polling URL:', url);
 
-    const res = await fetch(url);
+    const res = await fetch(url, { method: 'GET' });
     const text = await res.text();
     debugLog('原始响应文本:', text.substr(0, 200));
 
