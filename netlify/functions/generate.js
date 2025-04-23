@@ -3,7 +3,7 @@
 
 // Suno API配置
 const SUNO_API_URL = 'https://apibox.erweima.ai/api/v1/generate';
-const SUNO_API_KEY = '54eb13895a8bd99af384da696d9f6419';
+const SUNO_API_KEY = process.env.SUNO_API_KEY || '54eb13895a8bd99af384da696d9f6419';
 
 exports.handler = async function(event, context) {
   try {
@@ -34,7 +34,7 @@ exports.handler = async function(event, context) {
 
     // 解析请求体
     const body = JSON.parse(event.body);
-    const { prompt, style, test } = body;
+    const { prompt, style, test, instrumental, model, title, tags, instrument, tempo, callBackUrl } = body;
     
     console.log('请求正文:', JSON.stringify(body, null, 2));
     console.log('API密钥(前6位):', SUNO_API_KEY.substring(0, 6) + '...');
@@ -48,6 +48,18 @@ exports.handler = async function(event, context) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ message: '缺少必要参数: prompt' })
+      };
+    }
+    
+    // 确保instrumental参数存在 - API要求此参数必须存在
+    if (instrumental === undefined || instrumental === null) {
+      return {
+        statusCode: 400,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ message: '缺少必要参数: instrumental' })
       };
     }
 
@@ -73,14 +85,22 @@ exports.handler = async function(event, context) {
     const requestUrl = SUNO_API_URL;
     console.log('发送请求到:', requestUrl);
     
-    // 构建请求体
+    // 构建请求体 - 确保包含所有必要参数
     const requestBody = {
-      prompt: prompt
+      prompt: prompt,
+      instrumental: instrumental // 显式设置instrumental参数
     };
     
-    if (style) {
-      requestBody.style = style;
-    }
+    // 添加其他可选参数
+    if (style) requestBody.style = style;
+    if (model) requestBody.model = model;
+    if (title) requestBody.title = title;
+    if (tags) requestBody.tags = tags;
+    if (instrument) requestBody.instrument = instrument;
+    if (tempo) requestBody.tempo = tempo;
+    if (callBackUrl) requestBody.callBackUrl = callBackUrl;
+    
+    console.log('请求体:', JSON.stringify(requestBody, null, 2));
     
     // 发送请求到Suno API
     const response = await fetch(requestUrl, {
@@ -116,8 +136,25 @@ exports.handler = async function(event, context) {
       };
     }
 
+    // 处理API错误响应
     if (!response.ok) {
       console.error('API返回错误:', response.status, data);
+      
+      // 如果API返回了code和msg字段（erweima.ai API的格式）
+      if (data.code !== undefined && data.msg) {
+        return {
+          statusCode: response.status,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ 
+            message: `API错误(${data.code}): ${data.msg}`,
+            error: data
+          })
+        };
+      }
+      
       return {
         statusCode: response.status,
         headers: {
