@@ -130,9 +130,14 @@ export const handler = async (arg) => {
       body: JSON.stringify({ code: 400, msg: '缺少 id 参数' }),
     }, isEdge);
   }
-  
-  console.log('[debug] id =', id, '| taskId =', taskId);
+
+  // 去掉 pending- 前缀
   const taskId = id.startsWith('pending-') ? id.slice(8) : id;
+
+  // debug 日志（现在放在合法位置）
+  console.log('[debug] id =', id, '| taskId =', taskId);
+
+  // 拼 Suno 查询 URL
   const apiURL = `${SUNO_RECORD_INFO_URL}?id=${encodeURIComponent(taskId)}`;
 
   /* ---------- 调 Suno API ---------- */
