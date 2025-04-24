@@ -7,7 +7,7 @@
 
 /* ───────── 1. 常量与小工具 ───────── */
 const SUNO_RECORD_INFO_URL =
-  'https://apibox.erweima.ai/api/v1/generate/record-info'; // 基础地址
+  'https://apibox.erweima.ai/api/v1/generate/record-info';
 
 const TIMEOUT_MS = 10_000;
 const MAX_RETRY  = 2;
@@ -44,23 +44,15 @@ const fetchRetry = async (url, opt) => {
 /* ───────── 2. 解析请求：兼容 v1 & v2 ───────── */
 async function parseIncoming(arg) {
   if (typeof arg?.method === 'string' && typeof arg?.headers?.get === 'function') {
-    // v2 / Edge (Request)
+    /* v2 / Edge */
     const req    = arg;
-    const urlObj = new URL(req.url);
-    const query  = Object.fromEntries(urlObj.searchParams.entries());
-    const m      = req.method.toUpperCase();
-    const raw    = m === 'POST' ? await req.text() : '';
-    const body   = raw ? JSON.parse(raw) : null;
-    return { method: m, query, body, isEdge: true };
+    const qs     = Object.fromEntries(new URL(req.url).searchParams.entries());
+    const raw    = req.method === 'POST' ? await req.text() : '';
+    return { method: req.method.toUpperCase(), query: qs, body: raw ? JSON.parse(raw) : null, isEdge:true };
   }
-  // v1 (event)
+  /* v1 / Node */
   const { httpMethod, queryStringParameters, body } = arg;
-  return {
-    method: httpMethod.toUpperCase(),
-    query : queryStringParameters || {},
-    body  : body ? JSON.parse(body) : null,
-    isEdge: false,
-  };
+  return { method: httpMethod.toUpperCase(), query: queryStringParameters || {}, body: body ? JSON.parse(body) : null, isEdge:false };
 }
 
 function buildRes({ status = 200, headers = {}, body = '' }, isEdge) {
@@ -72,28 +64,17 @@ function buildRes({ status = 200, headers = {}, body = '' }, isEdge) {
 export const handler = async (arg) => {
   const { method, query, body, isEdge } = await parseIncoming(arg);
 
-  /* ---- CORS 预检 ---- */
+  /* ---- 预检 ---- */
   if (method === 'OPTIONS') {
     return buildRes({ status: 204, headers: cors }, isEdge);
   }
 
-  /* ---- 获取 taskId (前端统一字段 id) ---- */
-  let taskId =
-    query.id       ||
-    query.taskId   ||
-    query.task_id  ||
-    null;
-
-  if (!taskId && body) {
-    taskId = body.id || body.taskId || body.task_id || null;
-  }
-
+  /* ---- 拿 taskId ---- */
+  let taskId = query.id || query.taskId || (body ? body.id || body.taskId : null);
   if (!taskId && (isEdge ? arg.url : arg.event?.path)) {
-    const pathname = isEdge ? new URL(arg.url).pathname : arg.event.path;
-    const parts = pathname.split('/');
-    if (parts[3] === 'get-generation' && parts[4]) taskId = parts[4];
+    const p = (isEdge ? new URL(arg.url).pathname : arg.event.path).split('/');
+    if (p[3] === 'get-generation' && p[4]) taskId = p[4];
   }
-
   if (!taskId) {
     return buildRes({
       status : 400,
@@ -101,8 +82,8 @@ export const handler = async (arg) => {
       body   : JSON.stringify({ code: 400, msg: '缺少 id / taskId 参数' }),
     }, isEdge);
   }
-
   if (taskId.startsWith('pending-')) taskId = taskId.slice(8);
+
   console.log('[get-generation] 查询 taskId =', taskId);
 
   /* ---- 调 Suno record-info：GET + ?taskId= ---- */
@@ -115,13 +96,29 @@ export const handler = async (arg) => {
         Authorization : `Bearer ${process.env.SUNO_API_KEY}`,
       },
     });
-    const txt = await r.text();
-    console.log('[get-generation] Suno 返回 (前 300):', txt.slice(0, 300));
+    const raw = await r.text();
+    console.log('[get-generation] Suno 返回 (前 150):', raw.slice(0, 150));
+
+    /* ──── 关键：扁平化给前端 ──── */
+    let j;
+    try { j = JSON.parse(raw); } catch { j = {}; }
+
+    const audioUrl = j?.data?.response?.sunoData?.[0]?.audioUrl || null;
+    const status   = j?.data?.status === 'SUCCESS' ? 'COMPLETE' : j?.data?.status || 'PROCESSING';
+    const progress = status === 'COMPLETE' ? 1 : 0; // Suno 未给百分比
+
+    const front = {
+      id       : taskId,
+      status,                    // "COMPLETE" 或 "PROCESSING"
+      progress,                  // 0/1
+      audio_url: audioUrl,       // 前端 useSuno 正在找的字段
+      raw      : j               // 调试用，前端可忽略
+    };
 
     return buildRes({
-      status : r.status,
+      status : 200,
       headers: { ...cors, 'Content-Type': 'application/json' },
-      body   : txt,
+      body   : JSON.stringify(front),
     }, isEdge);
 
   } catch (e) {
