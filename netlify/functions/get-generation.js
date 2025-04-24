@@ -46,6 +46,10 @@ const fetchRetry = async (url, opt) => {
 
 // 2. 处理函数 ----------------------------------------------------
 export async function handler(event) {
+  console.log('=== incoming event ===');
+  console.log(JSON.stringify(event, null, 2));
+  console.log('=== end event ===');
+  
   // 增加详细日志，记录所有重要信息
   console.log('[get-generation] 收到请求：', {
     method: event.httpMethod,
