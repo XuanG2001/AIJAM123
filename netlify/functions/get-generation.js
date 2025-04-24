@@ -1,220 +1,170 @@
 // === netlify/functions/get-generation.js ===
-// 代理 Suno "record-info" 接口，返回生成进度或最终 audio_url
-// 依赖环境变量 SUNO_API_KEY (Netlify → Site settings → Env vars)
+// 代理 Suno “record-info” 接口，返回生成进度或最终 audio_url
+// 依赖环境变量：SUNO_API_KEY  (Netlify → Site settings → Env vars)
 
-// 1. 常量与工具 --------------------------------------------------
+// -----------------------------------------------------------------------------
+// 1. 常量与工具
+// -----------------------------------------------------------------------------
 const SUNO_RECORD_INFO_URL =
   'https://apibox.erweima.ai/api/v1/generate/record-info';
 
 const TIMEOUT_MS = 10_000; // 10 s 超时
-const MAX_RETRY = 2; // 最多重试 2 次（共 3 次请求）
+const MAX_RETRY  = 2;      // 最多重试 2 次（共 3 次请求）
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin' : '*',
   'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Allow-Methods': 'GET,HEAD,OPTIONS,POST'
+  'Access-Control-Allow-Methods': 'GET,HEAD,OPTIONS,POST',
 };
 
-// Fetch with timeout helper
+// fetch 带超时
 const fetchTimeout = (url, opt = {}, ms = TIMEOUT_MS) =>
   new Promise((resolve, reject) => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), ms);
+    const timer = setTimeout(() => controller.abort(), ms);
     fetch(url, { ...opt, signal: controller.signal })
-      .then((response) => {
-        clearTimeout(timeoutId);
-        resolve(response);
-      })
-      .catch((error) => {
-        clearTimeout(timeoutId);
-        reject(error);
-      });
+      .then((res) => { clearTimeout(timer); resolve(res); })
+      .catch((err) => { clearTimeout(timer); reject(err); });
   });
 
-// Basic exponential‑backoff retry
+// 指数回退重试
 const fetchRetry = async (url, opt) => {
   for (let i = 0; i <= MAX_RETRY; i++) {
     try {
       if (i) console.log(`[retry ${i}]`, url);
       return await fetchTimeout(url, opt);
-    } catch (err) {
-      if (i === MAX_RETRY) throw err;
+    } catch (e) {
+      if (i === MAX_RETRY) throw e;
       await new Promise((r) => setTimeout(r, 1000 * 2 ** i));
     }
   }
 };
 
-// 2. 处理函数 ----------------------------------------------------
+// -----------------------------------------------------------------------------
+// 2. 处理函数
+// -----------------------------------------------------------------------------
 export async function handler(event) {
+  // —— 打印完整 event，方便远程调试 ——
   console.log('=== incoming event ===');
   console.log(JSON.stringify(event, null, 2));
   console.log('=== end event ===');
-  
-  // 增加详细日志，记录所有重要信息
-  console.log('[get-generation] 收到请求：', {
-    method: event.httpMethod,
-    path: event.path,
-    queryParams: event.queryStringParameters,
-    headers: Object.keys(event.headers),
-    body: event.body ? '有请求体' : '无请求体'
-  });
 
   const { httpMethod, queryStringParameters, path, body } = event;
 
-  // CORS 预检
+  // ---------------- CORS 预检 ----------------
   if (httpMethod === 'OPTIONS') {
-    console.log('[get-generation] 处理OPTIONS请求');
-    return new Response(null, {
-      status: 204,
-      headers: corsHeaders
-    });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
-  // 详细记录POST请求的请求体
-  if (httpMethod === 'POST' && body) {
-    console.log('[get-generation] POST请求体原始内容:', body);
-  }
-  
-  // 查询参数处理
-  console.log('[get-generation] 查询参数 =', queryStringParameters);
-  
-  // 处理请求体 - 如果有请求体，尝试从请求体获取ID
+  // ---------------- 解析请求体 ----------------
+  // 在 Netlify Functions v1，body 是字符串；
+  // 在 v2 / Edge runtime，body 是 ReadableStream。
   let bodyData = null;
   if (body) {
     try {
-      console.log('[get-generation] 正在解析请求体...');
-      bodyData = JSON.parse(body);
-      console.log('[get-generation] 请求体解析结果:', JSON.stringify(bodyData));
+      let rawBody;
+
+      // 1) 字符串
+      if (typeof body === 'string') {
+        rawBody = body;
+      }
+      // 2) ReadableStream（支持 .text()）
+      else if (typeof body === 'object' && typeof body.text === 'function') {
+        rawBody = await body.text();
+      }
+
+      if (rawBody) {
+        console.log('[get-generation] 原始请求体:', rawBody.slice(0, 200));
+        bodyData = JSON.parse(rawBody);
+        console.log('[get-generation] 解析后的 bodyData:', bodyData);
+      } else {
+        console.warn('[get-generation] body 既不是字符串也不支持 .text() —— 跳过解析');
+      }
     } catch (e) {
-      console.error('[get-generation] 请求体解析错误:', e.message, '原始体:', body);
+      console.error('[get-generation] 请求体解析失败:', e.message);
     }
   }
 
-  // 尝试从多个来源获取ID 
+  // ---------------- 获取 ID ----------------
   let id = null;
-  
-  // 1. 首先从查询参数获取
+
+  // 1) 查询参数
   if (queryStringParameters) {
-    id = queryStringParameters.id || 
-         queryStringParameters.generationId || 
-         queryStringParameters.generation_id || 
-         queryStringParameters.ID;
-         
-    if (id) console.log('[get-generation] 从查询参数获取ID:', id);
+    id =
+      queryStringParameters.id ||
+      queryStringParameters.generationId ||
+      queryStringParameters.generation_id ||
+      queryStringParameters.ID;
+    if (id) console.log('[get-generation] 从查询参数获取 ID:', id);
   }
-  
-  // 2. 如果查询参数没有，从请求体获取
+
+  // 2) 请求体
   if (!id && bodyData) {
-    // 检查各种可能的字段名称
-    const possibleFields = ['id', 'generationId', 'generation_id', 'ID', 'Id'];
-    
-    for (const field of possibleFields) {
-      if (bodyData[field]) {
-        id = bodyData[field];
-        console.log(`[get-generation] 从请求体中的 '${field}' 字段获取ID:`, id);
-        break;
-      }
+    const fields = ['id', 'generationId', 'generation_id', 'ID', 'Id'];
+    for (const f of fields) {
+      if (bodyData[f]) { id = bodyData[f]; break; }
     }
-    
-    // 如果找不到，整个打印请求体便于调试
-    if (!id) {
-      console.log('[get-generation] 请求体中未找到ID，请求体字段:', Object.keys(bodyData));
-    }
+    if (id) console.log('[get-generation] 从请求体获取 ID:', id);
   }
-  
-  // 3. 最后尝试从路径获取
+
+  // 3) URL 路径
   if (!id && path) {
-    console.log('[get-generation] 尝试从路径获取ID, path =', path);
-    const pathParts = path.split('/');
-    console.log('[get-generation] 路径部分:', pathParts);
-    
-    if (pathParts.length > 4 && pathParts[3] === 'get-generation') {
-      if (pathParts[4] && pathParts[4].length > 5) {
-        id = pathParts[4];
-        console.log('[get-generation] 从路径获取ID:', id);
-      }
+    const parts = path.split('/');
+    if (parts.length > 4 && parts[3] === 'get-generation' && parts[4]) {
+      id = parts[4];
+      console.log('[get-generation] 从路径获取 ID:', id);
     }
   }
 
-  // 测试请求处理
+  // ---------------- 特殊测试 ----------------
   if (queryStringParameters?.test === 'true') {
-    console.log('[get-generation] 处理测试请求');
     return new Response(
-      JSON.stringify({ 
-        code: 200, 
-        msg: '测试成功',
-        detail: '服务器正常运行' 
-      }), 
-      {
-        status: 200,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        }
-      }
+      JSON.stringify({ code: 200, msg: '测试成功', detail: '服务器正常运行' }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   }
-  
+
+  // ---------------- 校验 ----------------
   if (!id) {
-    console.log('[get-generation] 未找到ID参数，返回400错误');
     return new Response(
-      JSON.stringify({ 
-        code: 400, 
-        msg: '缺少 id 参数',
-        detail: '请确保通过查询参数、请求体或URL路径提供ID' 
-      }), 
-      {
-        status: 400,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        }
-      }
+      JSON.stringify({ code: 400, msg: '缺少 id 参数' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   }
 
-  // 如果有pending-前缀，移除前缀获取真实任务ID
-  const taskId = id.startsWith('pending-') ? id.substring(8) : id;
-  
-  // 构建API请求URL
-  const api = `${SUNO_RECORD_INFO_URL}?id=${encodeURIComponent(taskId)}`;
-  console.log('[get-generation] 原始ID:', id, '处理后ID:', taskId);
-  console.log('[get-generation] API请求:', api);
-  console.log('[get-generation] key head =', (process.env.SUNO_API_KEY || '').slice(0, 8));
+  // 去掉 pending- 前缀
+  const taskId = id.startsWith('pending-') ? id.slice(8) : id;
+  const apiUrl = `${SUNO_RECORD_INFO_URL}?id=${encodeURIComponent(taskId)}`;
 
+  console.log('[get-generation] 原始 ID:', id, '任务 ID:', taskId);
+  console.log('[get-generation] API →', apiUrl);
+
+  // ---------------- 调 Suno API ----------------
   try {
-    const response = await fetchRetry(api, {
+    const resp = await fetchRetry(apiUrl, {
       headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${process.env.SUNO_API_KEY}`
-      }
+        Accept       : 'application/json',
+        Authorization: `Bearer ${process.env.SUNO_API_KEY}`,
+      },
     });
-    const body = await response.text();
-    console.log('[response]', body.slice(0, 300)); // 打印前 300 字方便排查
-    
-    // 返回Response对象
-    return new Response(body, {
-      status: response.status,
+    const text = await resp.text();
+    console.log('[get-generation] Suno 返回 (前 300):', text.slice(0, 300));
+
+    return new Response(text, {
+      status : resp.status,
       headers: {
         ...corsHeaders,
-        'Content-Type': response.headers.get('Content-Type') || 'application/json'
-      }
+        'Content-Type': resp.headers.get('Content-Type') || 'application/json',
+      },
     });
   } catch (err) {
-    console.error('[get-generation] error:', err.message);
+    console.error('[get-generation] 请求 Suno 失败:', err.message);
     return new Response(
-      JSON.stringify({ code: 502, msg: err.message }), 
-      {
-        status: 502,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json'
-        }
-      }
+      JSON.stringify({ code: 502, msg: err.message }),
+      { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   }
 }
 
-// 添加默认导出以符合 Netlify Functions 的期望格式
+// Netlify 要求必须有默认导出
 export default handler;
-
