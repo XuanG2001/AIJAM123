@@ -130,7 +130,8 @@ export const handler = async (arg) => {
       body: JSON.stringify({ code: 400, msg: '缺少 id 参数' }),
     }, isEdge);
   }
-
+  
+  console.log('[debug] id =', id, '| taskId =', taskId);
   const taskId = id.startsWith('pending-') ? id.slice(8) : id;
   const apiURL = `${SUNO_RECORD_INFO_URL}?id=${encodeURIComponent(taskId)}`;
 
