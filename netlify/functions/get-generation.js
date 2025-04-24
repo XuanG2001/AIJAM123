@@ -1,15 +1,16 @@
 // === netlify/functions/get-generation.js ===
-// 代理 Suno “record-info” 接口，返回进度或 audio_url
-// 使用环境变量 SUNO_API_KEY
+// 代理 Suno “record-info” 接口，查询任务进度或最终 audio_url
+// 运行于 Netlify Functions（兼容 v1 Node 与 v2 / Edge Runtime）
+// 依赖环境变量：SUNO_API_KEY
 
 /******************************************************************************/
-// 1. 工具 & 常量
+// 1. 常量 & 工具
 /******************************************************************************/
 const SUNO_RECORD_INFO_URL =
   'https://apibox.erweima.ai/api/v1/generate/record-info';
 
-const TIMEOUT_MS = 10_000;
-const MAX_RETRY  = 2;
+const TIMEOUT_MS = 10_000;   // 单次请求超时
+const MAX_RETRY  = 2;        // 失败重试次数
 
 const corsHeaders = {
   'Access-Control-Allow-Origin' : '*',
@@ -22,10 +23,10 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const fetchTimeout = (url, opt = {}, ms = TIMEOUT_MS) =>
   new Promise((resolve, reject) => {
     const ctrl = new AbortController();
-    const t    = setTimeout(() => ctrl.abort(), ms);
+    const timer = setTimeout(() => ctrl.abort(), ms);
     fetch(url, { ...opt, signal: ctrl.signal })
-      .then((r) => { clearTimeout(t); resolve(r); })
-      .catch((e) => { clearTimeout(t); reject(e); });
+      .then((res) => { clearTimeout(timer); resolve(res); })
+      .catch((err) => { clearTimeout(timer); reject(err); });
   });
 
 const fetchRetry = async (url, opt) => {
@@ -33,18 +34,18 @@ const fetchRetry = async (url, opt) => {
     try {
       if (i) console.log(`[retry ${i}] ${url}`);
       return await fetchTimeout(url, opt);
-    } catch (e) {
-      if (i === MAX_RETRY) throw e;
+    } catch (err) {
+      if (i === MAX_RETRY) throw err;
       await sleep(1000 * 2 ** i);
     }
   }
 };
 
 /******************************************************************************/
-// 2. 通用解析：让同一份代码兼容  ➜  v1(event) & v2/Edge(request)
+// 2. 通用解析：同一份代码兼容  v1(event) & v2/Edge(request)
 /******************************************************************************/
 async function parseIncoming(arg) {
-  // -------- v2 / Edge：传进来的是 Request --------
+  /* ---------- v2 / Edge：参数是 Request ---------- */
   if (typeof arg?.method === 'string' && typeof arg?.headers?.get === 'function') {
     const request = arg;
     const url     = new URL(request.url);
@@ -61,7 +62,7 @@ async function parseIncoming(arg) {
     return { method, query, bodyData, isEdge: true, request };
   }
 
-  // -------- v1：传进来的是 event --------
+  /* ---------- v1：参数是 event ---------- */
   const event = arg;
   const { httpMethod: method, queryStringParameters: query } = event;
   let bodyData = null;
@@ -71,7 +72,7 @@ async function parseIncoming(arg) {
 }
 
 /******************************************************************************/
-// 3. 帮你自动生成符合运行时的返回值
+// 3. 生成符合运行时的返回值
 /******************************************************************************/
 function buildResponse({ status = 200, headers = {}, body = '' }, isEdge) {
   if (isEdge) {
@@ -86,12 +87,12 @@ function buildResponse({ status = 200, headers = {}, body = '' }, isEdge) {
 export const handler = async (arg) => {
   const { method, query, bodyData, isEdge } = await parseIncoming(arg);
 
-  /* ---------- CORS / 预检 ---------- */
+  /* ---------- CORS 预检 ---------- */
   if (method === 'OPTIONS') {
     return buildResponse({ status: 204, headers: corsHeaders }, isEdge);
   }
 
-  /* ---------- 获取 id ---------- */
+  /* ---------- 获取任务 id ---------- */
   let id =
     query.id ||
     query.generationId ||
@@ -104,51 +105,51 @@ export const handler = async (arg) => {
     }
   }
 
-  // 支持 /get-generation/:id 这种形式
+  // 兼容 /get-generation/:id 路径形式
   if (!id && (isEdge ? arg.url : arg.event?.path)) {
-    const pathname = isEdge
-      ? new URL(arg.url).pathname
-      : arg.event.path;
+    const pathname = isEdge ? new URL(arg.url).pathname : arg.event.path;
     const parts = pathname.split('/');
     if (parts[3] === 'get-generation' && parts[4]) id = parts[4];
   }
 
-  /* ---------- 测试接口 ---------- */
+  /* ---------- 快速健康检查 ---------- */
   if (query.test === 'true') {
     return buildResponse({
-      status: 200,
+      status : 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: 200, msg: '测试成功' }),
+      body   : JSON.stringify({ code: 200, msg: '测试成功' }),
     }, isEdge);
   }
 
-  /* ---------- 必须要有 id ---------- */
+  /* ---------- id 必填 ---------- */
   if (!id) {
     return buildResponse({
-      status: 400,
+      status : 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code: 400, msg: '缺少 id 参数' }),
+      body   : JSON.stringify({ code: 400, msg: '缺少 id 参数' }),
     }, isEdge);
   }
 
   // 去掉 pending- 前缀
   const taskId = id.startsWith('pending-') ? id.slice(8) : id;
+  console.log('[debug] 查询 taskId =', taskId);
 
-  // debug 日志（现在放在合法位置）
-  console.log('[debug] id =', id, '| taskId =', taskId);
-
-  // 拼 Suno 查询 URL
-  const apiURL = `${SUNO_RECORD_INFO_URL}?id=${encodeURIComponent(taskId)}`;
-
-  /* ---------- 调 Suno API ---------- */
+  /**************************************************************************/
+  /*  调 Suno record-info —— 必须 POST + JSON body { id: taskId }           */
+  /**************************************************************************/
   try {
-    const resp = await fetchRetry(apiURL, {
+    const resp = await fetchRetry(SUNO_RECORD_INFO_URL, {
+      method : 'POST',
       headers: {
-        Accept       : 'application/json',
-        Authorization: `Bearer ${process.env.SUNO_API_KEY}`,
+        'Content-Type': 'application/json',
+        'Accept'      : 'application/json',
+        'Authorization': `Bearer ${process.env.SUNO_API_KEY}`,
       },
+      body: JSON.stringify({ id: taskId }),
     });
+
     const text = await resp.text();
+    console.log('[get-generation] Suno 返回 (前 300):', text.slice(0, 300));
 
     return buildResponse({
       status : resp.status,
@@ -158,14 +159,16 @@ export const handler = async (arg) => {
       },
       body   : text,
     }, isEdge);
-  } catch (e) {
+
+  } catch (err) {
+    console.error('[get-generation] 调 Suno 失败:', err.message);
     return buildResponse({
       status : 502,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      body   : JSON.stringify({ code: 502, msg: e.message }),
+      body   : JSON.stringify({ code: 502, msg: err.message }),
     }, isEdge);
   }
 };
 
-/* ---------- default 导出（老 bundler 需要） ---------- */
+/* ---------- default 导出（老版 bundler 需要） ---------- */
 export default handler;
