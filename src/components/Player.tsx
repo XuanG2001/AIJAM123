@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import { formatTime, downloadAudio } from '@/lib/utils';
-import { Download, ExternalLink } from 'lucide-react';
+import { Download, Play } from 'lucide-react';
 
 interface PlayerProps {
   audioUrl: string | null;
@@ -208,7 +208,7 @@ const Player = ({ audioUrl, isGenerating }: PlayerProps) => {
               aria-label="在新窗口播放"
               title="在新窗口播放"
             >
-              <ExternalLink size={16} />
+              <Play size={16} />
             </button>
             
             <button
