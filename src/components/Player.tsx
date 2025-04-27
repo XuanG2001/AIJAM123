@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import { formatTime, downloadAudio } from '@/lib/utils';
-import { Play, Pause, Download, RefreshCw } from 'lucide-react';
+import { Download, ExternalLink } from 'lucide-react';
 
 interface PlayerProps {
   audioUrl: string | null;
@@ -123,33 +123,6 @@ const Player = ({ audioUrl, isGenerating }: PlayerProps) => {
         const errorHandler = (error: Error) => {
           console.error('加载音频出错:', error);
           setLoadError('无法加载音频文件，可能是URL无效或跨域限制');
-          
-          // 如果直接加载失败，尝试通过音频元素播放
-          if (audioUrl) {
-            console.log('尝试使用Audio元素加载...');
-            const audio = new Audio(audioUrl);
-            audio.oncanplaythrough = () => {
-              setLoadError(null);
-              // 创建临时媒体元素并提取音频数据
-              const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-              const audioSource = audioContext.createMediaElementSource(audio);
-              
-              // 将音频数据直接传递给Wavesurfer(如果API允许)
-              if (wavesurferRef.current && 'loadDecodedBuffer' in wavesurferRef.current) {
-                // 注意：这需要wavesurfer支持此API
-                console.log('尝试直接加载解码后的缓冲区');
-              } else {
-                // 回退方案：显示替代UI
-                console.log('使用替代播放器UI');
-                document.getElementById('fallback-player')?.classList.remove('hidden');
-              }
-            };
-            
-            audio.onerror = () => {
-              console.error('音频元素加载失败');
-              setLoadError('无法通过任何方法加载音频');
-            };
-          }
         };
         
         wavesurferRef.current.on('ready', loadHandler);
@@ -166,22 +139,10 @@ const Player = ({ audioUrl, isGenerating }: PlayerProps) => {
     }
   }, [audioUrl]);
   
-  // 播放/暂停控制
-  const togglePlayPause = () => {
-    if (wavesurferRef.current) {
-      wavesurferRef.current.playPause();
-    } else if (audioUrl) {
-      // 播放器初始化失败时的备用方案
-      const audio = document.getElementById('backup-audio') as HTMLAudioElement;
-      if (audio) {
-        if (audio.paused) {
-          audio.play();
-          setIsPlaying(true);
-        } else {
-          audio.pause();
-          setIsPlaying(false);
-        }
-      }
+  // 在新窗口打开音频
+  const openAudioInNewWindow = () => {
+    if (audioUrl) {
+      window.open(audioUrl, '_blank');
     }
   };
   
@@ -189,20 +150,6 @@ const Player = ({ audioUrl, isGenerating }: PlayerProps) => {
   const handleDownload = () => {
     if (audioUrl) {
       downloadAudio(audioUrl);
-    }
-  };
-  
-  // 重置播放器
-  const handleReset = () => {
-    if (wavesurferRef.current) {
-      wavesurferRef.current.stop();
-    } else if (audioUrl) {
-      const audio = document.getElementById('backup-audio') as HTMLAudioElement;
-      if (audio) {
-        audio.currentTime = 0;
-        audio.pause();
-        setIsPlaying(false);
-      }
     }
   };
 
@@ -253,43 +200,22 @@ const Player = ({ audioUrl, isGenerating }: PlayerProps) => {
           )}
         </div>
         
-        {/* 备用音频播放器 */}
         {audioUrl && (
-          <div id="fallback-player" className={loadError ? "" : "hidden"}>
-            <audio 
-              id="backup-audio" 
-              src={audioUrl}
-              controls
-              className="w-full"
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-              onEnded={() => setIsPlaying(false)}
-            />
-          </div>
-        )}
-        
-        {audioUrl && !loadError && (
           <div className="flex justify-center space-x-4">
             <button
-              onClick={togglePlayPause}
+              onClick={openAudioInNewWindow}
               className="p-2 rounded-full bg-jam-primary text-white hover:bg-purple-600 transition-colors"
-              aria-label={isPlaying ? '暂停' : '播放'}
+              aria-label="在新窗口播放"
+              title="在新窗口播放"
             >
-              {isPlaying ? <Pause size={16} /> : <Play size={16} />}
-            </button>
-            
-            <button
-              onClick={handleReset}
-              className="p-2 rounded-full bg-muted text-foreground hover:bg-accent transition-colors"
-              aria-label="重置"
-            >
-              <RefreshCw size={16} />
+              <ExternalLink size={16} />
             </button>
             
             <button
               onClick={handleDownload}
               className="p-2 rounded-full bg-muted text-foreground hover:bg-accent transition-colors"
               aria-label="下载"
+              title="下载MP3"
             >
               <Download size={16} />
             </button>
