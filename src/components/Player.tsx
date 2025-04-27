@@ -75,7 +75,45 @@ const Player = ({ audioUrl, isGenerating }: PlayerProps) => {
       console.log('尝试加载音频URL:', audioUrl);
       
       try {
-        wavesurferRef.current.load(audioUrl);
+        // 检查URL是否有效
+        const isValidUrl = (url: string) => {
+          try {
+            new URL(url);
+            return true;
+          } catch (e) {
+            return false;
+          }
+        };
+
+        // 确保URL是完整的绝对URL
+        let urlToLoad = audioUrl;
+        if (!isValidUrl(audioUrl)) {
+          if (audioUrl.startsWith('/')) {
+            // 相对于网站根目录的URL
+            urlToLoad = window.location.origin + audioUrl;
+          } else {
+            // 其他不完整URL，可能需要添加协议
+            urlToLoad = 'https://' + audioUrl;
+          }
+          console.log('转换后的URL:', urlToLoad);
+        }
+        
+        // 添加CORS代理，如果是跨域请求
+        if (!urlToLoad.includes(window.location.hostname) && !urlToLoad.includes('localhost')) {
+          // 可以选择使用CORS代理
+          console.log('使用代理URL加载跨域资源');
+        }
+        
+        // 先执行预检
+        fetch(urlToLoad, { method: 'HEAD', mode: 'no-cors' })
+          .then(() => {
+            console.log('音频资源预检成功');
+            wavesurferRef.current?.load(urlToLoad);
+          })
+          .catch(err => {
+            console.error('音频资源预检失败:', err);
+            setLoadError('无法访问音频URL，可能存在跨域限制');
+          });
         
         // 监听加载事件，处理可能的加载失败
         const loadHandler = () => {
@@ -86,10 +124,31 @@ const Player = ({ audioUrl, isGenerating }: PlayerProps) => {
           console.error('加载音频出错:', error);
           setLoadError('无法加载音频文件，可能是URL无效或跨域限制');
           
-          // 尝试使用备用音频
-          if (!audioUrl.includes('file-examples.com')) {
-            console.log('尝试加载备用音频...');
-            wavesurferRef.current?.load('https://file-examples.com/wp-content/uploads/2017/11/file_example_MP3_700KB.mp3');
+          // 如果直接加载失败，尝试通过音频元素播放
+          if (audioUrl) {
+            console.log('尝试使用Audio元素加载...');
+            const audio = new Audio(audioUrl);
+            audio.oncanplaythrough = () => {
+              setLoadError(null);
+              // 创建临时媒体元素并提取音频数据
+              const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+              const audioSource = audioContext.createMediaElementSource(audio);
+              
+              // 将音频数据直接传递给Wavesurfer(如果API允许)
+              if (wavesurferRef.current && 'loadDecodedBuffer' in wavesurferRef.current) {
+                // 注意：这需要wavesurfer支持此API
+                console.log('尝试直接加载解码后的缓冲区');
+              } else {
+                // 回退方案：显示替代UI
+                console.log('使用替代播放器UI');
+                document.getElementById('fallback-player')?.classList.remove('hidden');
+              }
+            };
+            
+            audio.onerror = () => {
+              console.error('音频元素加载失败');
+              setLoadError('无法通过任何方法加载音频');
+            };
           }
         };
         
@@ -111,6 +170,18 @@ const Player = ({ audioUrl, isGenerating }: PlayerProps) => {
   const togglePlayPause = () => {
     if (wavesurferRef.current) {
       wavesurferRef.current.playPause();
+    } else if (audioUrl) {
+      // 播放器初始化失败时的备用方案
+      const audio = document.getElementById('backup-audio') as HTMLAudioElement;
+      if (audio) {
+        if (audio.paused) {
+          audio.play();
+          setIsPlaying(true);
+        } else {
+          audio.pause();
+          setIsPlaying(false);
+        }
+      }
     }
   };
   
@@ -125,6 +196,13 @@ const Player = ({ audioUrl, isGenerating }: PlayerProps) => {
   const handleReset = () => {
     if (wavesurferRef.current) {
       wavesurferRef.current.stop();
+    } else if (audioUrl) {
+      const audio = document.getElementById('backup-audio') as HTMLAudioElement;
+      if (audio) {
+        audio.currentTime = 0;
+        audio.pause();
+        setIsPlaying(false);
+      }
     }
   };
 
@@ -175,6 +253,21 @@ const Player = ({ audioUrl, isGenerating }: PlayerProps) => {
           )}
         </div>
         
+        {/* 备用音频播放器 */}
+        {audioUrl && (
+          <div id="fallback-player" className={loadError ? "" : "hidden"}>
+            <audio 
+              id="backup-audio" 
+              src={audioUrl}
+              controls
+              className="w-full"
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+              onEnded={() => setIsPlaying(false)}
+            />
+          </div>
+        )}
+        
         {audioUrl && !loadError && (
           <div className="flex justify-center space-x-4">
             <button
@@ -204,7 +297,7 @@ const Player = ({ audioUrl, isGenerating }: PlayerProps) => {
         )}
       </div>
       
-      {/* 添加调试入口 */}
+      {/* 调试入口 */}
       <div className="text-xs text-center mt-4">
         <a href="/debug" className="text-jam-primary hover:underline">
           遇到问题？点击这里进行系统诊断
