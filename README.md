@@ -98,7 +98,7 @@ AI Jam Playground 是一个交互式音乐创作平台，允许用户通过钢�
 
 ## 🔄 API 代理说明
 
-本项目使用 Netlify Functions 代理 Suno API 请求，避免 CORS 问题：
+本项目使用 Netlify Functions 代理 Suno API 请求。
 
 
 
