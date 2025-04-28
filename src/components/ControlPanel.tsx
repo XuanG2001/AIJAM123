@@ -55,6 +55,7 @@ const ControlPanel = ({
     statusDetails
   } = useSuno();
   
+  // 监听音频URL变化，显示成功提示
   useEffect(() => {
     if (generatedUrl) {
       setAudioUrl(generatedUrl);
@@ -65,12 +66,6 @@ const ControlPanel = ({
         description: '音乐已成功生成，可以在播放器中试听或下载',
         variant: 'default'
       });
-      
-      const timer = setTimeout(() => {
-        setGenerationSuccess(false);
-      }, 3000);
-      
-      return () => clearTimeout(timer);
     }
   }, [generatedUrl, setAudioUrl]);
   
@@ -145,6 +140,11 @@ const ControlPanel = ({
     } finally {
       setIsGenerating(false);
     }
+  };
+  
+  // 处理"再试一次"点击
+  const handleTryAgain = () => {
+    setGenerationSuccess(false);
   };
   
   return (
@@ -279,50 +279,61 @@ const ControlPanel = ({
         </div>
         
         <div className="mt-6">
-          <button
-            className={`w-full py-2 rounded-md ${
-              loading 
-                ? 'bg-gray-400' 
-                : generationSuccess 
-                  ? 'bg-green-500 hover:bg-green-600' 
-                  : 'bg-jam-primary hover:bg-jam-primary-dark'
-            } text-white font-medium flex items-center justify-center`}
-            onClick={handleGenerate}
-            disabled={loading}
-          >
-            {loading ? (
-              <>
-                <svg
-                  className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  ></circle>
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  ></path>
-                </svg>
-                生成中 {progress ? `(${Math.round(progress)}%)` : ''}
-              </>
-            ) : generationSuccess ? (
-              <>
+          {generationSuccess ? (
+            <div className="flex space-x-2">
+              <button
+                className="w-1/2 py-2 rounded-md bg-green-500 hover:bg-green-600 text-white font-medium flex items-center justify-center"
+                disabled={true}
+              >
                 <CheckCircle className="mr-2 h-4 w-4" />
                 生成成功
-              </>
-            ) : (
-              <>生成AI音乐</>
-            )}
-          </button>
+              </button>
+              <button
+                className="w-1/2 py-2 rounded-md bg-blue-500 hover:bg-blue-600 text-white font-medium flex items-center justify-center"
+                onClick={handleTryAgain}
+              >
+                再试一次
+              </button>
+            </div>
+          ) : (
+            <button
+              className={`w-full py-2 rounded-md ${
+                loading 
+                  ? 'bg-gray-400' 
+                  : 'bg-jam-primary hover:bg-jam-primary-dark'
+              } text-white font-medium flex items-center justify-center`}
+              onClick={handleGenerate}
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <svg
+                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    ></circle>
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    ></path>
+                  </svg>
+                  生成中 {progress ? `(${Math.round(progress)}%)` : ''}
+                </>
+              ) : (
+                <>生成AI音乐</>
+              )}
+            </button>
+          )}
           
           <div className="text-xs text-center mt-2 text-muted-foreground">
             API状态: {error ? '连接错误' : generatedUrl ? '已连接' : '待连接'}
