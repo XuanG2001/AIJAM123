@@ -17,10 +17,10 @@ AI Jam Playground 是一个交互式音乐创作平台，允许用户通过钢�
 
 - **前端框架**：React 18 + TypeScript + Vite
 - **样式**：TailwindCSS + shadcn/ui
-- **音频处理**：Tone.js (本地合成) + wavesurfer.js (波形显示)
+- **音频处理**：Tone.js (本地合成) + wavesurfer.js (波形显示，暂未开放)
 - **状态管理**：Zustand
-- **后端代理**：Vercel Serverless Functions
-- **部署**：Vercel
+- **后端代理**：Netlify Functions
+- **部署**：Neylify
 
 ## 📦 本地开发
 
@@ -90,7 +90,7 @@ AI Jam Playground 是一个交互式音乐创作平台，允许用户通过钢�
 ## 📝 使用说明
 
 1. **选择乐器**：在顶部标签页中选择钢琴键盘或架子鼓
-2. **即兴演奏**：使用键盘弹奏音符 (钢琴使用 A-S-D-F-G-H-J / W-E-T-Y-U，架子鼓使用数字键 1-9)
+2. **即兴演奏**：使用键盘弹奏音符 (钢琴模式使用 A-S-D-F-G-H-J / W-E-T-Y-U，架子鼓模式暂未开放)
 3. **录制旋律**：点击"开始录制"按钮或按下"R"键开始录制，按"S"键停止
 4. **设置参数**：在控制面板中填写音乐描述、调整风格、速度等参数
 5. **生成音乐**：点击"生成AI音乐"按钮
@@ -98,11 +98,9 @@ AI Jam Playground 是一个交互式音乐创作平台，允许用户通过钢�
 
 ## 🔄 API 代理说明
 
-本项目使用 Vercel Serverless Functions 代理 Suno API 请求，避免 CORS 问题：
+本项目使用 Netlify Functions 代理 Suno API 请求，避免 CORS 问题：
 
-- `POST /api/v1/generate` - 创建音乐生成任务
-- `GET /api/v1/generate/{id}` - 查询任务状态
-- `POST /api/v1/generate/extend` - 延长现有音乐
+
 
 ## 📄 许可证
 
