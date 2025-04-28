@@ -8,7 +8,7 @@ import { Slider } from './ui/slider';
 import useJamStore from '@/store/useJamStore';
 import useSuno from '@/hooks/useSuno';
 import { toast } from '@/hooks/use-toast';
-import { Loader2, Music, Download } from 'lucide-react';
+import { Loader2, Music, Download, CheckCircle } from 'lucide-react';
 
 interface ControlPanelProps {
   activeInstrument: InstrumentType;
@@ -23,6 +23,7 @@ const ControlPanel = ({
   setIsGenerating,
   setAudioUrl
 }: ControlPanelProps) => {
+  const [generationSuccess, setGenerationSuccess] = useState(false);
   const { 
     customMode, 
     setCustomMode,
@@ -57,6 +58,19 @@ const ControlPanel = ({
   useEffect(() => {
     if (generatedUrl) {
       setAudioUrl(generatedUrl);
+      setGenerationSuccess(true);
+      
+      toast({
+        title: '生成成功',
+        description: '音乐已成功生成，可以在播放器中试听或下载',
+        variant: 'default'
+      });
+      
+      const timer = setTimeout(() => {
+        setGenerationSuccess(false);
+      }, 3000);
+      
+      return () => clearTimeout(timer);
     }
   }, [generatedUrl, setAudioUrl]);
   
@@ -267,7 +281,11 @@ const ControlPanel = ({
         <div className="mt-6">
           <button
             className={`w-full py-2 rounded-md ${
-              loading ? 'bg-gray-400' : 'bg-jam-primary hover:bg-jam-primary-dark'
+              loading 
+                ? 'bg-gray-400' 
+                : generationSuccess 
+                  ? 'bg-green-500 hover:bg-green-600' 
+                  : 'bg-jam-primary hover:bg-jam-primary-dark'
             } text-white font-medium flex items-center justify-center`}
             onClick={handleGenerate}
             disabled={loading}
@@ -295,6 +313,11 @@ const ControlPanel = ({
                   ></path>
                 </svg>
                 生成中 {progress ? `(${Math.round(progress)}%)` : ''}
+              </>
+            ) : generationSuccess ? (
+              <>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                生成成功
               </>
             ) : (
               <>生成AI音乐</>
