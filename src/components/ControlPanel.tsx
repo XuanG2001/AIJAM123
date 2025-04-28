@@ -24,6 +24,7 @@ const ControlPanel = ({
   setAudioUrl
 }: ControlPanelProps) => {
   const [generationSuccess, setGenerationSuccess] = useState(false);
+  const [forceUpdate, setForceUpdate] = useState(0);
   const { 
     customMode, 
     setCustomMode,
@@ -55,35 +56,12 @@ const ControlPanel = ({
     statusDetails
   } = useSuno();
   
-  // 监听音频URL变化，显示成功提示
-  useEffect(() => {
-    if (generatedUrl) {
-      setAudioUrl(generatedUrl);
-      setGenerationSuccess(true);
-      
-      toast({
-        title: '生成成功',
-        description: '音乐已成功生成，可以在播放器中试听或下载',
-        variant: 'default'
-      });
-    }
-  }, [generatedUrl, setAudioUrl]);
-  
-  useEffect(() => {
-    if (error) {
-      toast({
-        title: '错误',
-        description: error,
-        variant: 'destructive'
-      });
-    }
-  }, [error]);
-  
   const handleGenerate = async () => {
     if (loading) return;
     
     try {
       setIsGenerating(true);
+      setGenerationSuccess(false);
       
       if (!customMode && !prompt) {
         toast({
@@ -126,7 +104,20 @@ const ControlPanel = ({
       
       console.log('生成参数:', params);
       
-      await generate(params);
+      const result = await generate(params);
+      console.log('生成完成，结果:', result);
+      
+      if (generatedUrl) {
+        console.log('已获取音频URL:', generatedUrl);
+        setAudioUrl(generatedUrl);
+        setGenerationSuccess(true);
+        
+        toast({
+          title: '生成成功',
+          description: '音乐已成功生成，可以在播放器中试听或下载',
+          variant: 'default'
+        });
+      }
       
       clearNotes();
       
@@ -142,10 +133,41 @@ const ControlPanel = ({
     }
   };
   
+  useEffect(() => {
+    console.log('检测到音频URL变化:', generatedUrl);
+    if (generatedUrl) {
+      setAudioUrl(generatedUrl);
+      setGenerationSuccess(true);
+      
+      setForceUpdate(prev => prev + 1);
+      
+      toast({
+        title: '生成成功',
+        description: '音乐已成功生成，可以在播放器中试听或下载',
+        variant: 'default'
+      });
+    }
+  }, [generatedUrl, setAudioUrl]);
+  
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: '错误',
+        description: error,
+        variant: 'destructive'
+      });
+    }
+  }, [error]);
+  
   // 处理"再试一次"点击
   const handleTryAgain = () => {
+    console.log('点击再试一次，重置状态');
     setGenerationSuccess(false);
+    setForceUpdate(prev => prev + 1); // 强制UI更新
   };
+  
+  // 调试渲染
+  console.log('渲染计数:', forceUpdate, '状态:', { loading, generationSuccess, hasUrl: !!generatedUrl });
   
   return (
     <div className="rounded-lg border border-border bg-card p-6 shadow-sm">
