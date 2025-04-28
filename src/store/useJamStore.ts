@@ -96,7 +96,7 @@ const useJamStore = create<JamState>((set, get) => ({
         
       formattedPrompt = state.customMode 
         ? state.prompt 
-        : `${state.prompt}\n\nNotes played: ${notesDescription}\nTempo: ${state.tempo} BPM`;
+        : `${state.prompt}\n\n请根据下面用户演奏的音阶结合上述要求创作一首音乐。\nNotes played: ${notesDescription}\nTempo: ${state.tempo} BPM`;
     }
     
     // 设置默认回调URL - 这将在ControlPanel中被覆盖
